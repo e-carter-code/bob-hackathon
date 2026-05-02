@@ -30,6 +30,13 @@ interface TestResult {
   id: string;
   status: 'PASS' | 'FAIL' | 'WARN';
   name: string;
+  flowCovered: string;
+  duration: string;
+  executionPath: string[]; // node IDs in execution order
+  expectedPath: string[];
+  actualPath: string[];
+  failureNode?: string;
+  failureReason?: string;
 }
 
 interface FlowNodeData extends Record<string, unknown> {
@@ -363,10 +370,48 @@ const flowDefinitions: Record<string, { nodes: Node<FlowNodeData>[]; edges: Edge
 };
 
 const mockTests: TestResult[] = [
-  { id: 't1', status: 'PASS', name: 'Approve applicant with score 760' },
-  { id: 't2', status: 'PASS', name: 'Approve applicant at threshold 680' },
-  { id: 't3', status: 'FAIL', name: 'Reject applicant with fraud flag' },
-  { id: 't4', status: 'WARN', name: 'Pricing test needs rerun' },
+  {
+    id: 't1',
+    status: 'PASS',
+    name: 'Approve applicant with score 760',
+    flowCovered: 'Credit Score Evaluation',
+    duration: '124ms',
+    executionPath: ['c1', 'c2', 'c4', 'c6', 'c7'],
+    expectedPath: ['c1', 'c2', 'c4', 'c6', 'c7'],
+    actualPath: ['c1', 'c2', 'c4', 'c6', 'c7'],
+  },
+  {
+    id: 't2',
+    status: 'PASS',
+    name: 'Approve applicant at threshold 680',
+    flowCovered: 'Credit Score Evaluation',
+    duration: '118ms',
+    executionPath: ['c1', 'c2', 'c4', 'c6', 'c8'],
+    expectedPath: ['c1', 'c2', 'c4', 'c6', 'c8'],
+    actualPath: ['c1', 'c2', 'c4', 'c6', 'c8'],
+  },
+  {
+    id: 't3',
+    status: 'FAIL',
+    name: 'Reject applicant with fraud flag',
+    flowCovered: 'Risk Assessment',
+    duration: '156ms',
+    executionPath: ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'],
+    expectedPath: ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r8'],
+    actualPath: ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'],
+    failureNode: 'r6',
+    failureReason: 'Expected to continue to pricing, but triggered manual review instead',
+  },
+  {
+    id: 't4',
+    status: 'WARN',
+    name: 'Pricing test needs rerun',
+    flowCovered: 'Pricing & Offer Calculation',
+    duration: '—',
+    executionPath: [],
+    expectedPath: [],
+    actualPath: [],
+  },
 ];
 
 const editableRulesData: Record<string, EditableRule> = {
@@ -414,6 +459,11 @@ function EditorPageInner() {
   // Rule editing state
   const [editableRules, setEditableRules] = useState<Record<string, EditableRule>>(editableRulesData);
   const [successMessage, setSuccessMessage] = useState<string>('');
+
+  // Test path highlighting state
+  const [highlightedPath, setHighlightedPath] = useState<string[]>([]);
+  const [isPlayingTest, setIsPlayingTest] = useState(false);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
   const { fitView } = useReactFlow();
   const { zoom } = useViewport();
