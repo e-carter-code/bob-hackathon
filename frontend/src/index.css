@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-app-bg text-text-primary antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+  }
+
+  * {
+    @apply border-border;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-card-bg border border-border rounded-lg p-6;
+  }
+
+  .panel {
+    @apply bg-panel-bg border border-border rounded-lg;
+  }
+
+  .btn-primary {
+    @apply bg-ibm-blue hover:bg-blue-600 text-white font-medium px-4 py-2 rounded-lg transition-colors;
+  }
+
+  .btn-secondary {
+    @apply bg-panel-bg-secondary hover:bg-card-bg text-text-primary font-medium px-4 py-2 rounded-lg border border-border transition-colors;
+  }
+}
+
+/* Made with Bob */
