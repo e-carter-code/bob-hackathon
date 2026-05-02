@@ -12,6 +12,9 @@ import {
   Connection,
   useReactFlow,
   NodeProps,
+  Handle,
+  Position,
+  MarkerType,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -59,6 +62,7 @@ function BusinessNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
         typeColors[nodeData.type]
       } ${selected ? 'ring-2 ring-accent-blue shadow-lg' : ''}`}
     >
+      <Handle type="target" position={Position.Top} className="!bg-accent-blue !w-3 !h-3" />
       <div className="px-3 py-2">
         <div className="flex items-center justify-between mb-1">
           <span className="text-[10px] font-bold text-text-subtle uppercase tracking-wide">
@@ -72,6 +76,7 @@ function BusinessNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
           {nodeData.label}
         </div>
       </div>
+      <Handle type="source" position={Position.Bottom} className="!bg-accent-blue !w-3 !h-3" />
     </div>
   );
 }
@@ -106,46 +111,92 @@ const flowDefinitions: Record<string, { nodes: Node<FlowNodeData>[]; edges: Edge
       {
         id: 'n1',
         type: 'business',
-        position: { x: 50, y: 100 },
+        position: { x: 400, y: 50 },
         data: { label: 'Application Received', type: 'start' },
+        draggable: false,
       },
       {
         id: 'n2',
         type: 'business',
-        position: { x: 300, y: 100 },
+        position: { x: 400, y: 180 },
         data: { label: 'Applicant Eligibility', type: 'action' },
+        draggable: false,
       },
       {
         id: 'n3',
         type: 'business',
-        position: { x: 550, y: 100 },
+        position: { x: 400, y: 310 },
         data: { label: 'Risk Assessment', type: 'domain', childFlowId: 'risk' },
+        draggable: false,
       },
       {
         id: 'n4',
         type: 'business',
-        position: { x: 800, y: 100 },
+        position: { x: 400, y: 440 },
         data: { label: 'Pricing & Offer Calculation', type: 'action' },
+        draggable: false,
       },
       {
         id: 'n5',
         type: 'business',
-        position: { x: 1050, y: 100 },
+        position: { x: 400, y: 570 },
         data: { label: 'Final Decision Routing', type: 'decision' },
+        draggable: false,
       },
       {
         id: 'n6',
         type: 'business',
-        position: { x: 1300, y: 100 },
+        position: { x: 400, y: 700 },
         data: { label: 'Decision Output', type: 'output' },
+        draggable: false,
       },
     ],
     edges: [
-      { id: 'e1-2', source: 'n1', target: 'n2', type: 'smoothstep', animated: true },
-      { id: 'e2-3', source: 'n2', target: 'n3', type: 'smoothstep', animated: true },
-      { id: 'e3-4', source: 'n3', target: 'n4', type: 'smoothstep', animated: true },
-      { id: 'e4-5', source: 'n4', target: 'n5', type: 'smoothstep', animated: true },
-      { id: 'e5-6', source: 'n5', target: 'n6', type: 'smoothstep', animated: true },
+      {
+        id: 'e1-2',
+        source: 'n1',
+        target: 'n2',
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: '#0f62fe', strokeWidth: 3 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
+      },
+      {
+        id: 'e2-3',
+        source: 'n2',
+        target: 'n3',
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: '#0f62fe', strokeWidth: 3 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
+      },
+      {
+        id: 'e3-4',
+        source: 'n3',
+        target: 'n4',
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: '#0f62fe', strokeWidth: 3 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
+      },
+      {
+        id: 'e4-5',
+        source: 'n4',
+        target: 'n5',
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: '#0f62fe', strokeWidth: 3 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
+      },
+      {
+        id: 'e5-6',
+        source: 'n5',
+        target: 'n6',
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: '#0f62fe', strokeWidth: 3 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
+      },
     ],
   },
   risk: {
@@ -528,6 +579,9 @@ export default function EditorPage() {
               }
             }}
             nodeTypes={nodeTypes}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={true}
             fitView
             className="bg-panel-bg"
           >
