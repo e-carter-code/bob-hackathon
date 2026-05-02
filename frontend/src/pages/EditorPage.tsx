@@ -16,6 +16,7 @@ import {
   Position,
   MarkerType,
   ReactFlowProvider,
+  useViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -36,6 +37,22 @@ interface FlowNodeData extends Record<string, unknown> {
   type: 'start' | 'domain' | 'decision' | 'action' | 'output';
   childFlowId?: string;
   description?: string;
+  isEditable?: boolean;
+  ruleId?: string;
+  isModified?: boolean;
+}
+
+interface EditableRule {
+  id: string;
+  name: string;
+  parentFlow: string;
+  businessMeaning: string;
+  technicalExpression: string;
+  threshold: number;
+  originalThreshold: number;
+  sourceFiles: string[];
+  impactedFlows: string[];
+  testsNeedRerun: number;
 }
 
 // Custom Business Node Component
@@ -69,9 +86,16 @@ function BusinessNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
           <span className="text-[10px] font-bold text-text-subtle uppercase tracking-wide">
             {typeLabels[nodeData.type]}
           </span>
-          {nodeData.childFlowId && (
-            <span className="text-[10px] text-accent-blue font-medium">▸ OPEN</span>
-          )}
+          <div className="flex items-center gap-1">
+            {nodeData.isModified && (
+              <span className="text-[9px] font-bold text-warning-yellow bg-warning-yellow/20 px-1.5 py-0.5 rounded">
+                MODIFIED
+              </span>
+            )}
+            {nodeData.childFlowId && (
+              <span className="text-[10px] text-accent-blue font-medium">▸ OPEN</span>
+            )}
+          </div>
         </div>
         <div className="text-[13px] font-medium text-text-strong leading-tight">
           {nodeData.label}
@@ -292,7 +316,14 @@ const flowDefinitions: Record<string, { nodes: Node<FlowNodeData>[]; edges: Edge
         id: 'c4',
         type: 'business',
         position: { x: 600, y: 310 },
-        data: { label: 'Score >= 700?', type: 'decision' },
+        data: {
+          label: 'Score >= 700?',
+          type: 'decision',
+          isEditable: true,
+          ruleId: 'min-credit-score',
+          isModified: false,
+        },
+        draggable: false,
       },
       {
         id: 'c5',
@@ -338,6 +369,29 @@ const mockTests: TestResult[] = [
   { id: 't4', status: 'WARN', name: 'Pricing test needs rerun' },
 ];
 
+const editableRulesData: Record<string, EditableRule> = {
+  'min-credit-score': {
+    id: 'min-credit-score',
+    name: 'Minimum Credit Score',
+    parentFlow: 'Risk Assessment / Credit Score Evaluation',
+    businessMeaning: 'Applicant must meet the minimum credit score threshold.',
+    technicalExpression: 'creditScore >= 700',
+    threshold: 700,
+    originalThreshold: 700,
+    sourceFiles: [
+      'RiskScoringService.java:42',
+      'credit-rules.xml:18',
+      'RiskScoringServiceTest.java:73',
+    ],
+    impactedFlows: [
+      'Credit Score Evaluation modified',
+      'Risk Tier Assignment impacted',
+      'Final Decision Routing impacted',
+    ],
+    testsNeedRerun: 4,
+  },
+};
+
 function EditorPageInner() {
   const [currentFlowId, setCurrentFlowId] = useState<string>('root');
   const [breadcrumb, setBreadcrumb] = useState<Array<{ id: string; name: string }>>([
@@ -356,6 +410,10 @@ function EditorPageInner() {
   );
   const [isTransitioning, setIsTransitioning] = useState(false);
   const semanticZoomTriggeredRef = useRef(false);
+  
+  // Rule editing state
+  const [editableRules, setEditableRules] = useState<Record<string, EditableRule>>(editableRulesData);
+  const [successMessage, setSuccessMessage] = useState<string>('');
 
   const { fitView } = useReactFlow();
   const { zoom } = useViewport();
@@ -431,6 +489,81 @@ function EditorPageInner() {
       setBreadcrumb(newBreadcrumb);
       setSelectedNodeId(null);
     }
+  };
+
+  const updateRuleThreshold = (ruleId: string, newThreshold: number) => {
+    setEditableRules((prev) => ({
+      ...prev,
+      [ruleId]: {
+        ...prev[ruleId],
+        threshold: newThreshold,
+        technicalExpression: `creditScore >= ${newThreshold}`,
+      },
+    }));
+  };
+
+  const applyRuleChange = (ruleId: string) => {
+    const rule = editableRules[ruleId];
+    if (!rule) return;
+
+    // Update node label and mark as modified
+    setNodes((nds) =>
+      nds.map((node) => {
+        const nodeData = node.data as FlowNodeData;
+        if (nodeData.ruleId === ruleId) {
+          return {
+            ...node,
+            data: {
+              ...nodeData,
+              label: `Score >= ${rule.threshold}?`,
+              isModified: true,
+            },
+          };
+        }
+        return node;
+      })
+    );
+
+    // Show success message
+    setSuccessMessage(
+      `Rule updated: creditScore >= ${rule.originalThreshold} → creditScore >= ${rule.threshold}`
+    );
+    setTimeout(() => setSuccessMessage(''), 5000);
+  };
+
+  const revertRuleChange = (ruleId: string) => {
+    const rule = editableRules[ruleId];
+    if (!rule) return;
+
+    // Reset rule to original
+    setEditableRules((prev) => ({
+      ...prev,
+      [ruleId]: {
+        ...prev[ruleId],
+        threshold: prev[ruleId].originalThreshold,
+        technicalExpression: `creditScore >= ${prev[ruleId].originalThreshold}`,
+      },
+    }));
+
+    // Update node label and remove modified flag
+    setNodes((nds) =>
+      nds.map((node) => {
+        const nodeData = node.data as FlowNodeData;
+        if (nodeData.ruleId === ruleId) {
+          return {
+            ...node,
+            data: {
+              ...nodeData,
+              label: `Score >= ${rule.originalThreshold}?`,
+              isModified: false,
+            },
+          };
+        }
+        return node;
+      })
+    );
+
+    setSuccessMessage('');
   };
 
   const handleTreeClick = (node: RuleTreeNode) => {
@@ -661,72 +794,211 @@ function EditorPageInner() {
           </ReactFlow>
         </div>
 
-        {/* Right Pane: Inspector */}
+        {/* Right Pane: Inspector / Rule Editor */}
         <div className="w-80 bg-panel-bg-secondary border-l border-border overflow-y-auto">
           <div className="p-4">
-            <h3 className="text-sm font-semibold text-text-strong mb-3">
-              Inspector
-            </h3>
-            {selectedInfo ? (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-xs text-text-subtle mb-1">Name</div>
-                  <div className="text-sm font-medium text-text-strong">
-                    {selectedInfo.name}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-text-subtle mb-1">Flow</div>
-                  <div className="text-sm text-text-strong">
-                    {selectedInfo.flow}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-text-subtle mb-1">Type</div>
-                  <div className="text-sm text-text-strong uppercase">
-                    {selectedInfo.type}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-text-subtle mb-1">Description</div>
-                  <div className="text-sm text-text-muted">
-                    {selectedInfo.description}
-                  </div>
-                </div>
-                {selectedInfo.childFlowId && (
-                  <div className="p-2 bg-accent-blue/10 border border-accent-blue rounded">
-                    <div className="text-xs text-accent-blue font-medium">
-                      💡 Double-click node to open child flow
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <div className="text-xs text-text-subtle mb-1">Status</div>
-                  <span className="inline-block px-2 py-0.5 text-xs font-medium bg-success-green/20 text-success-green rounded">
-                    {selectedInfo.status}
-                  </span>
-                </div>
-                <div>
-                  <div className="text-xs text-text-subtle mb-2">
-                    Source Files
-                  </div>
-                  <div className="space-y-1">
-                    {selectedInfo.sourceFiles.map((file) => (
-                      <div
-                        key={file}
-                        className="text-xs text-text-strong bg-panel-bg px-2 py-1 rounded font-mono"
-                      >
-                        {file}
+            {(() => {
+              // Check if selected node is editable
+              const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null;
+              const nodeData = selectedNode?.data as FlowNodeData | undefined;
+              const isEditableNode = nodeData?.isEditable && nodeData?.ruleId;
+              const rule = isEditableNode ? editableRules[nodeData.ruleId!] : null;
+
+              if (isEditableNode && rule) {
+                // Show Business Rule Editor
+                return (
+                  <>
+                    <h3 className="text-sm font-semibold text-text-strong mb-3">
+                      Business Rule Editor
+                    </h3>
+                    <div className="space-y-4">
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Rule Name</div>
+                        <div className="text-sm font-semibold text-text-strong">
+                          {rule.name}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-sm text-text-muted">
-                Select a node to inspect business logic.
-              </div>
-            )}
+
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Parent Flow</div>
+                        <div className="text-xs text-text-muted">
+                          {rule.parentFlow}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Business Meaning</div>
+                        <div className="text-xs text-text-muted">
+                          {rule.businessMeaning}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Technical Expression</div>
+                        <div className="text-xs font-mono bg-panel-bg px-2 py-1.5 rounded text-accent-blue">
+                          {rule.technicalExpression}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-text-subtle mb-1 block">
+                          Editable Threshold
+                        </label>
+                        <input
+                          type="number"
+                          value={rule.threshold}
+                          onChange={(e) => updateRuleThreshold(rule.id, parseInt(e.target.value) || 0)}
+                          className="w-full px-3 py-2 bg-panel-bg border border-border rounded text-sm text-text-strong focus:outline-none focus:border-accent-blue"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="text-xs text-text-subtle mb-2">Source Locations</div>
+                        <div className="space-y-1">
+                          {rule.sourceFiles.map((file) => (
+                            <div
+                              key={file}
+                              className="text-xs text-text-strong bg-panel-bg px-2 py-1 rounded font-mono"
+                            >
+                              {file}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs text-text-subtle mb-2">Impact Preview</div>
+                        <div className="space-y-1">
+                          {rule.impactedFlows.map((flow, idx) => (
+                            <div key={idx} className="text-xs text-text-muted">
+                              • {flow}
+                            </div>
+                          ))}
+                          <div className="text-xs text-warning-yellow font-medium mt-2">
+                            {rule.testsNeedRerun} tests need rerun
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 pt-2">
+                        <button
+                          className="w-full btn-secondary text-sm py-2"
+                          onClick={() => {
+                            alert('Preview Impact: Would show detailed impact analysis');
+                          }}
+                        >
+                          Preview Impact
+                        </button>
+                        <button
+                          className="w-full btn-secondary text-sm py-2"
+                          onClick={() => {
+                            alert('Run Impacted Tests: Would execute affected test cases');
+                          }}
+                        >
+                          Run Impacted Tests
+                        </button>
+                        <button
+                          className="w-full btn-primary text-sm py-2"
+                          onClick={() => applyRuleChange(rule.id)}
+                          disabled={rule.threshold === rule.originalThreshold}
+                        >
+                          Apply Change
+                        </button>
+                        <button
+                          className="w-full btn-secondary text-sm py-2"
+                          onClick={() => revertRuleChange(rule.id)}
+                          disabled={rule.threshold === rule.originalThreshold}
+                        >
+                          Revert
+                        </button>
+                      </div>
+
+                      {successMessage && (
+                        <div className="p-3 bg-success-green/20 border border-success-green rounded">
+                          <div className="text-xs text-success-green font-medium">
+                            ✓ {successMessage}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              } else if (selectedInfo) {
+                // Show normal inspector
+                return (
+                  <>
+                    <h3 className="text-sm font-semibold text-text-strong mb-3">
+                      Inspector
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Name</div>
+                        <div className="text-sm font-medium text-text-strong">
+                          {selectedInfo.name}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Flow</div>
+                        <div className="text-sm text-text-strong">
+                          {selectedInfo.flow}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Type</div>
+                        <div className="text-sm text-text-strong uppercase">
+                          {selectedInfo.type}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Description</div>
+                        <div className="text-sm text-text-muted">
+                          {selectedInfo.description}
+                        </div>
+                      </div>
+                      {selectedInfo.childFlowId && (
+                        <div className="p-2 bg-accent-blue/10 border border-accent-blue rounded">
+                          <div className="text-xs text-accent-blue font-medium">
+                            💡 Double-click node to open child flow
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Status</div>
+                        <span className="inline-block px-2 py-0.5 text-xs font-medium bg-success-green/20 text-success-green rounded">
+                          {selectedInfo.status}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="text-xs text-text-subtle mb-2">
+                          Source Files
+                        </div>
+                        <div className="space-y-1">
+                          {selectedInfo.sourceFiles.map((file) => (
+                            <div
+                              key={file}
+                              className="text-xs text-text-strong bg-panel-bg px-2 py-1 rounded font-mono"
+                            >
+                              {file}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              } else {
+                return (
+                  <>
+                    <h3 className="text-sm font-semibold text-text-strong mb-3">
+                      Inspector
+                    </h3>
+                    <div className="text-sm text-text-muted">
+                      Select a node to inspect business logic.
+                    </div>
+                  </>
+                );
+              }
+            })()}
           </div>
         </div>
       </div>
@@ -791,25 +1063,3 @@ export default function EditorPage() {
     </ReactFlowProvider>
   );
 }
-
-// Made with Bob
-
-export default function EditorPage() {
-  return (
-    <ReactFlowProvider>
-      <EditorPageInner />
-    </ReactFlowProvider>
-  );
-}
-
-// Made with Bob
-
-export default function EditorPage() {
-  return (
-    <ReactFlowProvider>
-      <EditorPageInner />
-    </ReactFlowProvider>
-  );
-}
-
-// Made with Bob
