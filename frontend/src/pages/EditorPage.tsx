@@ -12,6 +12,7 @@ import {
   Connection,
   useReactFlow,
   NodeProps,
+  ReactFlowProvider,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -279,7 +280,7 @@ const mockTests: TestResult[] = [
   { id: 't4', status: 'WARN', name: 'Pricing test needs rerun' },
 ];
 
-export default function EditorPage() {
+function EditorPageInner() {
   const [currentFlowId, setCurrentFlowId] = useState<string>('root');
   const [breadcrumb, setBreadcrumb] = useState<Array<{ id: string; name: string }>>([
     { id: 'root', name: 'Credit Decision Engine' },
@@ -660,6 +661,14 @@ export default function EditorPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function EditorPage() {
+  return (
+    <ReactFlowProvider>
+      <EditorPageInner />
+    </ReactFlowProvider>
   );
 }
 
