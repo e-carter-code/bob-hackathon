@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Node,
@@ -12,6 +12,10 @@ import {
   Connection,
   useReactFlow,
   NodeProps,
+  Handle,
+  Position,
+  MarkerType,
+  ReactFlowProvider,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -59,6 +63,7 @@ function BusinessNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
         typeColors[nodeData.type]
       } ${selected ? 'ring-2 ring-accent-blue shadow-lg' : ''}`}
     >
+      <Handle type="target" position={Position.Top} className="!bg-accent-blue !w-3 !h-3" />
       <div className="px-3 py-2">
         <div className="flex items-center justify-between mb-1">
           <span className="text-[10px] font-bold text-text-subtle uppercase tracking-wide">
@@ -71,7 +76,15 @@ function BusinessNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
         <div className="text-[13px] font-medium text-text-strong leading-tight">
           {nodeData.label}
         </div>
+        {nodeData.childFlowId && selected && (
+          <div className="mt-2 pt-2 border-t border-accent-blue/30">
+            <div className="text-[10px] text-text-subtle">
+              Double-click or zoom deeply to reveal child flow
+            </div>
+          </div>
+        )}
       </div>
+      <Handle type="source" position={Position.Bottom} className="!bg-accent-blue !w-3 !h-3" />
     </div>
   );
 }
@@ -106,46 +119,92 @@ const flowDefinitions: Record<string, { nodes: Node<FlowNodeData>[]; edges: Edge
       {
         id: 'n1',
         type: 'business',
-        position: { x: 50, y: 100 },
+        position: { x: 400, y: 50 },
         data: { label: 'Application Received', type: 'start' },
+        draggable: false,
       },
       {
         id: 'n2',
         type: 'business',
-        position: { x: 300, y: 100 },
+        position: { x: 400, y: 180 },
         data: { label: 'Applicant Eligibility', type: 'action' },
+        draggable: false,
       },
       {
         id: 'n3',
         type: 'business',
-        position: { x: 550, y: 100 },
+        position: { x: 400, y: 310 },
         data: { label: 'Risk Assessment', type: 'domain', childFlowId: 'risk' },
+        draggable: false,
       },
       {
         id: 'n4',
         type: 'business',
-        position: { x: 800, y: 100 },
+        position: { x: 400, y: 440 },
         data: { label: 'Pricing & Offer Calculation', type: 'action' },
+        draggable: false,
       },
       {
         id: 'n5',
         type: 'business',
-        position: { x: 1050, y: 100 },
+        position: { x: 400, y: 570 },
         data: { label: 'Final Decision Routing', type: 'decision' },
+        draggable: false,
       },
       {
         id: 'n6',
         type: 'business',
-        position: { x: 1300, y: 100 },
+        position: { x: 400, y: 700 },
         data: { label: 'Decision Output', type: 'output' },
+        draggable: false,
       },
     ],
     edges: [
-      { id: 'e1-2', source: 'n1', target: 'n2', type: 'smoothstep', animated: true },
-      { id: 'e2-3', source: 'n2', target: 'n3', type: 'smoothstep', animated: true },
-      { id: 'e3-4', source: 'n3', target: 'n4', type: 'smoothstep', animated: true },
-      { id: 'e4-5', source: 'n4', target: 'n5', type: 'smoothstep', animated: true },
-      { id: 'e5-6', source: 'n5', target: 'n6', type: 'smoothstep', animated: true },
+      {
+        id: 'e1-2',
+        source: 'n1',
+        target: 'n2',
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: '#0f62fe', strokeWidth: 3 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
+      },
+      {
+        id: 'e2-3',
+        source: 'n2',
+        target: 'n3',
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: '#0f62fe', strokeWidth: 3 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
+      },
+      {
+        id: 'e3-4',
+        source: 'n3',
+        target: 'n4',
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: '#0f62fe', strokeWidth: 3 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
+      },
+      {
+        id: 'e4-5',
+        source: 'n4',
+        target: 'n5',
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: '#0f62fe', strokeWidth: 3 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
+      },
+      {
+        id: 'e5-6',
+        source: 'n5',
+        target: 'n6',
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: '#0f62fe', strokeWidth: 3 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
+      },
     ],
   },
   risk: {
@@ -153,60 +212,60 @@ const flowDefinitions: Record<string, { nodes: Node<FlowNodeData>[]; edges: Edge
       {
         id: 'r1',
         type: 'business',
-        position: { x: 50, y: 100 },
+        position: { x: 400, y: 50 },
         data: { label: 'Start Risk Assessment', type: 'start' },
       },
       {
         id: 'r2',
         type: 'business',
-        position: { x: 300, y: 100 },
+        position: { x: 400, y: 180 },
         data: { label: 'Credit Score Evaluation', type: 'domain', childFlowId: 'credit-score' },
       },
       {
         id: 'r3',
         type: 'business',
-        position: { x: 550, y: 100 },
+        position: { x: 400, y: 310 },
         data: { label: 'Debt-to-Income Ratio Check', type: 'action' },
       },
       {
         id: 'r4',
         type: 'business',
-        position: { x: 800, y: 100 },
+        position: { x: 400, y: 440 },
         data: { label: 'Fraud Signal Check', type: 'action' },
       },
       {
         id: 'r5',
         type: 'business',
-        position: { x: 1050, y: 100 },
+        position: { x: 400, y: 570 },
         data: { label: 'Risk Tier Assignment', type: 'action' },
       },
       {
         id: 'r6',
         type: 'business',
-        position: { x: 1300, y: 100 },
+        position: { x: 400, y: 700 },
         data: { label: 'Manual Review Trigger?', type: 'decision' },
       },
       {
         id: 'r7',
         type: 'business',
-        position: { x: 1300, y: 250 },
+        position: { x: 200, y: 830 },
         data: { label: 'Send to Manual Review', type: 'output' },
       },
       {
         id: 'r8',
         type: 'business',
-        position: { x: 1550, y: 100 },
+        position: { x: 600, y: 830 },
         data: { label: 'Continue to Pricing', type: 'output' },
       },
     ],
     edges: [
-      { id: 'er1-2', source: 'r1', target: 'r2', type: 'smoothstep', animated: true },
-      { id: 'er2-3', source: 'r2', target: 'r3', type: 'smoothstep', animated: true },
-      { id: 'er3-4', source: 'r3', target: 'r4', type: 'smoothstep', animated: true },
-      { id: 'er4-5', source: 'r4', target: 'r5', type: 'smoothstep', animated: true },
-      { id: 'er5-6', source: 'r5', target: 'r6', type: 'smoothstep', animated: true },
-      { id: 'er6-7', source: 'r6', target: 'r7', type: 'smoothstep', label: 'Yes', animated: true },
-      { id: 'er6-8', source: 'r6', target: 'r8', type: 'smoothstep', label: 'No', animated: true },
+      { id: 'er1-2', source: 'r1', target: 'r2', type: 'smoothstep', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
+      { id: 'er2-3', source: 'r2', target: 'r3', type: 'smoothstep', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
+      { id: 'er3-4', source: 'r3', target: 'r4', type: 'smoothstep', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
+      { id: 'er4-5', source: 'r4', target: 'r5', type: 'smoothstep', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
+      { id: 'er5-6', source: 'r5', target: 'r6', type: 'smoothstep', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
+      { id: 'er6-7', source: 'r6', target: 'r7', type: 'smoothstep', label: 'Yes', animated: true, style: { stroke: '#f1c21b', strokeWidth: 2 } },
+      { id: 'er6-8', source: 'r6', target: 'r8', type: 'smoothstep', label: 'No', animated: true, style: { stroke: '#24a148', strokeWidth: 2 } },
     ],
   },
   'credit-score': {
@@ -214,60 +273,60 @@ const flowDefinitions: Record<string, { nodes: Node<FlowNodeData>[]; edges: Edge
       {
         id: 'c1',
         type: 'business',
-        position: { x: 50, y: 100 },
+        position: { x: 400, y: 50 },
         data: { label: 'Read Credit Score', type: 'start' },
       },
       {
         id: 'c2',
         type: 'business',
-        position: { x: 300, y: 100 },
+        position: { x: 400, y: 180 },
         data: { label: 'Score Missing?', type: 'decision' },
       },
       {
         id: 'c3',
         type: 'business',
-        position: { x: 300, y: 250 },
+        position: { x: 200, y: 310 },
         data: { label: 'Manual Review', type: 'output' },
       },
       {
         id: 'c4',
         type: 'business',
-        position: { x: 550, y: 100 },
+        position: { x: 600, y: 310 },
         data: { label: 'Score >= 700?', type: 'decision' },
       },
       {
         id: 'c5',
         type: 'business',
-        position: { x: 550, y: 250 },
+        position: { x: 400, y: 440 },
         data: { label: 'High Risk Tier', type: 'output' },
       },
       {
         id: 'c6',
         type: 'business',
-        position: { x: 800, y: 100 },
+        position: { x: 800, y: 440 },
         data: { label: 'Score >= 760?', type: 'decision' },
       },
       {
         id: 'c7',
         type: 'business',
-        position: { x: 1050, y: 100 },
+        position: { x: 1000, y: 570 },
         data: { label: 'Preferred Risk Tier', type: 'output' },
       },
       {
         id: 'c8',
         type: 'business',
-        position: { x: 800, y: 250 },
+        position: { x: 600, y: 570 },
         data: { label: 'Standard Risk Tier', type: 'output' },
       },
     ],
     edges: [
-      { id: 'ec1-2', source: 'c1', target: 'c2', type: 'smoothstep', animated: true },
-      { id: 'ec2-3', source: 'c2', target: 'c3', type: 'smoothstep', label: 'Yes', animated: true },
-      { id: 'ec2-4', source: 'c2', target: 'c4', type: 'smoothstep', label: 'No', animated: true },
-      { id: 'ec4-5', source: 'c4', target: 'c5', type: 'smoothstep', label: 'No', animated: true },
-      { id: 'ec4-6', source: 'c4', target: 'c6', type: 'smoothstep', label: 'Yes', animated: true },
-      { id: 'ec6-7', source: 'c6', target: 'c7', type: 'smoothstep', label: 'Yes', animated: true },
-      { id: 'ec6-8', source: 'c6', target: 'c8', type: 'smoothstep', label: 'No', animated: true },
+      { id: 'ec1-2', source: 'c1', target: 'c2', type: 'smoothstep', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
+      { id: 'ec2-3', source: 'c2', target: 'c3', type: 'smoothstep', label: 'Yes', animated: true, style: { stroke: '#da1e28', strokeWidth: 2 } },
+      { id: 'ec2-4', source: 'c2', target: 'c4', type: 'smoothstep', label: 'No', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
+      { id: 'ec4-5', source: 'c4', target: 'c5', type: 'smoothstep', label: 'No', animated: true, style: { stroke: '#da1e28', strokeWidth: 2 } },
+      { id: 'ec4-6', source: 'c4', target: 'c6', type: 'smoothstep', label: 'Yes', animated: true, style: { stroke: '#24a148', strokeWidth: 2 } },
+      { id: 'ec6-7', source: 'c6', target: 'c7', type: 'smoothstep', label: 'Yes', animated: true, style: { stroke: '#24a148', strokeWidth: 2 } },
+      { id: 'ec6-8', source: 'c6', target: 'c8', type: 'smoothstep', label: 'No', animated: true, style: { stroke: '#f1c21b', strokeWidth: 2 } },
     ],
   },
 };
@@ -279,7 +338,7 @@ const mockTests: TestResult[] = [
   { id: 't4', status: 'WARN', name: 'Pricing test needs rerun' },
 ];
 
-export default function EditorPage() {
+function EditorPageInner() {
   const [currentFlowId, setCurrentFlowId] = useState<string>('root');
   const [breadcrumb, setBreadcrumb] = useState<Array<{ id: string; name: string }>>([
     { id: 'root', name: 'Credit Decision Engine' },
@@ -295,16 +354,54 @@ export default function EditorPage() {
   const [expandedTreeIds, setExpandedTreeIds] = useState<Set<string>>(
     new Set(['root', 'risk'])
   );
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const semanticZoomTriggeredRef = useRef(false);
 
   const { fitView } = useReactFlow();
+  const { zoom } = useViewport();
+
+  const SEMANTIC_ZOOM_THRESHOLD = 1.65;
 
   // Update nodes/edges when flow changes
   useEffect(() => {
     const flow = flowDefinitions[currentFlowId] || flowDefinitions.root;
     setNodes(flow.nodes);
     setEdges(flow.edges);
-    setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+    setIsTransitioning(true);
+    setTimeout(() => {
+      fitView({ padding: 0.2, duration: 300 });
+      setTimeout(() => {
+        setIsTransitioning(false);
+        semanticZoomTriggeredRef.current = false;
+      }, 350);
+    }, 50);
   }, [currentFlowId, setNodes, setEdges, fitView]);
+
+  // Semantic zoom behavior
+  useEffect(() => {
+    if (isTransitioning || semanticZoomTriggeredRef.current) return;
+    if (zoom < SEMANTIC_ZOOM_THRESHOLD) {
+      semanticZoomTriggeredRef.current = false;
+      return;
+    }
+
+    // Only trigger if selected node has childFlowId
+    if (selectedNodeId) {
+      const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+      if (selectedNode) {
+        const nodeData = selectedNode.data as FlowNodeData;
+        if (nodeData.childFlowId && flowDefinitions[nodeData.childFlowId]) {
+          semanticZoomTriggeredRef.current = true;
+          navigateToFlow(nodeData.childFlowId, nodeData.label);
+        }
+      }
+    }
+  }, [zoom, selectedNodeId, nodes, isTransitioning]);
+
+  // Reset semantic zoom trigger when selection changes
+  useEffect(() => {
+    semanticZoomTriggeredRef.current = false;
+  }, [selectedNodeId]);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -481,8 +578,29 @@ export default function EditorPage() {
               </button>
             )}
             <button
-              className="btn-secondary text-sm px-3 py-1"
+              className="btn-secondary text-sm px-3 py-1 font-semibold"
+              onClick={() => {
+                const reactFlow = useReactFlow();
+                reactFlow.zoomIn({ duration: 300 });
+              }}
+              title="Zoom In"
+            >
+              Zoom In
+            </button>
+            <button
+              className="btn-secondary text-sm px-3 py-1 font-semibold"
+              onClick={() => {
+                const reactFlow = useReactFlow();
+                reactFlow.zoomOut({ duration: 300 });
+              }}
+              title="Zoom Out"
+            >
+              Zoom Out
+            </button>
+            <button
+              className="btn-secondary text-sm px-3 py-1 font-semibold"
               onClick={() => fitView({ padding: 0.2, duration: 300 })}
+              title="Fit View"
             >
               Fit View
             </button>
@@ -528,6 +646,9 @@ export default function EditorPage() {
               }
             }}
             nodeTypes={nodeTypes}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={true}
             fitView
             className="bg-panel-bg"
           >
@@ -630,7 +751,7 @@ export default function EditorPage() {
             </button>
           ))}
         </div>
-        <div className="flex-1 overflow-y-auto px-4 py-2">
+        <div className="flex-1 overflow-y-auto px-4 py-2 custom-scrollbar">
           <div className="space-y-1">
             {mockTests.map((test) => (
               <div
@@ -660,6 +781,34 @@ export default function EditorPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function EditorPage() {
+  return (
+    <ReactFlowProvider>
+      <EditorPageInner />
+    </ReactFlowProvider>
+  );
+}
+
+// Made with Bob
+
+export default function EditorPage() {
+  return (
+    <ReactFlowProvider>
+      <EditorPageInner />
+    </ReactFlowProvider>
+  );
+}
+
+// Made with Bob
+
+export default function EditorPage() {
+  return (
+    <ReactFlowProvider>
+      <EditorPageInner />
+    </ReactFlowProvider>
   );
 }
 
