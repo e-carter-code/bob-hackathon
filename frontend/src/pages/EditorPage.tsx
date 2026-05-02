@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   ReactFlow,
   Node,
@@ -10,6 +10,8 @@ import {
   useEdgesState,
   addEdge,
   Connection,
+  useReactFlow,
+  NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -25,6 +27,59 @@ interface TestResult {
   name: string;
 }
 
+interface FlowNodeData extends Record<string, unknown> {
+  label: string;
+  type: 'start' | 'domain' | 'decision' | 'action' | 'output';
+  childFlowId?: string;
+  description?: string;
+}
+
+// Custom Business Node Component
+function BusinessNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
+  const nodeData = data as FlowNodeData;
+  const typeColors = {
+    start: 'border-accent-blue bg-accent-blue/10',
+    domain: 'border-accent-purple bg-accent-purple/10',
+    decision: 'border-warning-yellow bg-warning-yellow/10',
+    action: 'border-success-green bg-success-green/10',
+    output: 'border-text-muted bg-panel-bg-secondary',
+  };
+
+  const typeLabels = {
+    start: 'START',
+    domain: 'DOMAIN',
+    decision: 'DECISION',
+    action: 'ACTION',
+    output: 'OUTPUT',
+  };
+
+  return (
+    <div
+      className={`min-w-[200px] max-w-[240px] rounded border-2 transition-all ${
+        typeColors[nodeData.type]
+      } ${selected ? 'ring-2 ring-accent-blue shadow-lg' : ''}`}
+    >
+      <div className="px-3 py-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] font-bold text-text-subtle uppercase tracking-wide">
+            {typeLabels[nodeData.type]}
+          </span>
+          {nodeData.childFlowId && (
+            <span className="text-[10px] text-accent-blue font-medium">▸ OPEN</span>
+          )}
+        </div>
+        <div className="text-[13px] font-medium text-text-strong leading-tight">
+          {nodeData.label}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const nodeTypes = {
+  business: BusinessNode,
+};
+
 const mockRuleTree: RuleTreeNode = {
   id: 'root',
   name: 'Credit Decision Engine',
@@ -39,50 +94,183 @@ const mockRuleTree: RuleTreeNode = {
         { id: 'fraud', name: 'Fraud Signal Check' },
       ],
     },
-    { id: 'pricing', name: 'Pricing Calculation' },
+    { id: 'pricing', name: 'Pricing & Offer Calculation' },
     { id: 'routing', name: 'Final Decision Routing' },
   ],
 };
 
-const initialNodes: Node[] = [
-  {
-    id: '1',
-    type: 'default',
-    position: { x: 50, y: 200 },
-    data: { label: 'Application Received' },
+// Flow definitions
+const flowDefinitions: Record<string, { nodes: Node<FlowNodeData>[]; edges: Edge[] }> = {
+  root: {
+    nodes: [
+      {
+        id: 'n1',
+        type: 'business',
+        position: { x: 50, y: 100 },
+        data: { label: 'Application Received', type: 'start' },
+      },
+      {
+        id: 'n2',
+        type: 'business',
+        position: { x: 300, y: 100 },
+        data: { label: 'Applicant Eligibility', type: 'action' },
+      },
+      {
+        id: 'n3',
+        type: 'business',
+        position: { x: 550, y: 100 },
+        data: { label: 'Risk Assessment', type: 'domain', childFlowId: 'risk' },
+      },
+      {
+        id: 'n4',
+        type: 'business',
+        position: { x: 800, y: 100 },
+        data: { label: 'Pricing & Offer Calculation', type: 'action' },
+      },
+      {
+        id: 'n5',
+        type: 'business',
+        position: { x: 1050, y: 100 },
+        data: { label: 'Final Decision Routing', type: 'decision' },
+      },
+      {
+        id: 'n6',
+        type: 'business',
+        position: { x: 1300, y: 100 },
+        data: { label: 'Decision Output', type: 'output' },
+      },
+    ],
+    edges: [
+      { id: 'e1-2', source: 'n1', target: 'n2', type: 'smoothstep', animated: true },
+      { id: 'e2-3', source: 'n2', target: 'n3', type: 'smoothstep', animated: true },
+      { id: 'e3-4', source: 'n3', target: 'n4', type: 'smoothstep', animated: true },
+      { id: 'e4-5', source: 'n4', target: 'n5', type: 'smoothstep', animated: true },
+      { id: 'e5-6', source: 'n5', target: 'n6', type: 'smoothstep', animated: true },
+    ],
   },
-  {
-    id: '2',
-    type: 'default',
-    position: { x: 250, y: 200 },
-    data: { label: 'Applicant Eligibility' },
+  risk: {
+    nodes: [
+      {
+        id: 'r1',
+        type: 'business',
+        position: { x: 50, y: 100 },
+        data: { label: 'Start Risk Assessment', type: 'start' },
+      },
+      {
+        id: 'r2',
+        type: 'business',
+        position: { x: 300, y: 100 },
+        data: { label: 'Credit Score Evaluation', type: 'domain', childFlowId: 'credit-score' },
+      },
+      {
+        id: 'r3',
+        type: 'business',
+        position: { x: 550, y: 100 },
+        data: { label: 'Debt-to-Income Ratio Check', type: 'action' },
+      },
+      {
+        id: 'r4',
+        type: 'business',
+        position: { x: 800, y: 100 },
+        data: { label: 'Fraud Signal Check', type: 'action' },
+      },
+      {
+        id: 'r5',
+        type: 'business',
+        position: { x: 1050, y: 100 },
+        data: { label: 'Risk Tier Assignment', type: 'action' },
+      },
+      {
+        id: 'r6',
+        type: 'business',
+        position: { x: 1300, y: 100 },
+        data: { label: 'Manual Review Trigger?', type: 'decision' },
+      },
+      {
+        id: 'r7',
+        type: 'business',
+        position: { x: 1300, y: 250 },
+        data: { label: 'Send to Manual Review', type: 'output' },
+      },
+      {
+        id: 'r8',
+        type: 'business',
+        position: { x: 1550, y: 100 },
+        data: { label: 'Continue to Pricing', type: 'output' },
+      },
+    ],
+    edges: [
+      { id: 'er1-2', source: 'r1', target: 'r2', type: 'smoothstep', animated: true },
+      { id: 'er2-3', source: 'r2', target: 'r3', type: 'smoothstep', animated: true },
+      { id: 'er3-4', source: 'r3', target: 'r4', type: 'smoothstep', animated: true },
+      { id: 'er4-5', source: 'r4', target: 'r5', type: 'smoothstep', animated: true },
+      { id: 'er5-6', source: 'r5', target: 'r6', type: 'smoothstep', animated: true },
+      { id: 'er6-7', source: 'r6', target: 'r7', type: 'smoothstep', label: 'Yes', animated: true },
+      { id: 'er6-8', source: 'r6', target: 'r8', type: 'smoothstep', label: 'No', animated: true },
+    ],
   },
-  {
-    id: '3',
-    type: 'default',
-    position: { x: 450, y: 200 },
-    data: { label: 'Risk Assessment' },
+  'credit-score': {
+    nodes: [
+      {
+        id: 'c1',
+        type: 'business',
+        position: { x: 50, y: 100 },
+        data: { label: 'Read Credit Score', type: 'start' },
+      },
+      {
+        id: 'c2',
+        type: 'business',
+        position: { x: 300, y: 100 },
+        data: { label: 'Score Missing?', type: 'decision' },
+      },
+      {
+        id: 'c3',
+        type: 'business',
+        position: { x: 300, y: 250 },
+        data: { label: 'Manual Review', type: 'output' },
+      },
+      {
+        id: 'c4',
+        type: 'business',
+        position: { x: 550, y: 100 },
+        data: { label: 'Score >= 700?', type: 'decision' },
+      },
+      {
+        id: 'c5',
+        type: 'business',
+        position: { x: 550, y: 250 },
+        data: { label: 'High Risk Tier', type: 'output' },
+      },
+      {
+        id: 'c6',
+        type: 'business',
+        position: { x: 800, y: 100 },
+        data: { label: 'Score >= 760?', type: 'decision' },
+      },
+      {
+        id: 'c7',
+        type: 'business',
+        position: { x: 1050, y: 100 },
+        data: { label: 'Preferred Risk Tier', type: 'output' },
+      },
+      {
+        id: 'c8',
+        type: 'business',
+        position: { x: 800, y: 250 },
+        data: { label: 'Standard Risk Tier', type: 'output' },
+      },
+    ],
+    edges: [
+      { id: 'ec1-2', source: 'c1', target: 'c2', type: 'smoothstep', animated: true },
+      { id: 'ec2-3', source: 'c2', target: 'c3', type: 'smoothstep', label: 'Yes', animated: true },
+      { id: 'ec2-4', source: 'c2', target: 'c4', type: 'smoothstep', label: 'No', animated: true },
+      { id: 'ec4-5', source: 'c4', target: 'c5', type: 'smoothstep', label: 'No', animated: true },
+      { id: 'ec4-6', source: 'c4', target: 'c6', type: 'smoothstep', label: 'Yes', animated: true },
+      { id: 'ec6-7', source: 'c6', target: 'c7', type: 'smoothstep', label: 'Yes', animated: true },
+      { id: 'ec6-8', source: 'c6', target: 'c8', type: 'smoothstep', label: 'No', animated: true },
+    ],
   },
-  {
-    id: '4',
-    type: 'default',
-    position: { x: 650, y: 200 },
-    data: { label: 'Pricing Calculation' },
-  },
-  {
-    id: '5',
-    type: 'default',
-    position: { x: 850, y: 200 },
-    data: { label: 'Final Decision' },
-  },
-];
-
-const initialEdges: Edge[] = [
-  { id: 'e1-2', source: '1', target: '2', animated: true },
-  { id: 'e2-3', source: '2', target: '3', animated: true },
-  { id: 'e3-4', source: '3', target: '4', animated: true },
-  { id: 'e4-5', source: '4', target: '5', animated: true },
-];
+};
 
 const mockTests: TestResult[] = [
   { id: 't1', status: 'PASS', name: 'Approve applicant with score 760' },
@@ -92,15 +280,31 @@ const mockTests: TestResult[] = [
 ];
 
 export default function EditorPage() {
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [selectedTreeId, setSelectedTreeId] = useState<string | null>(null);
+  const [currentFlowId, setCurrentFlowId] = useState<string>('root');
+  const [breadcrumb, setBreadcrumb] = useState<Array<{ id: string; name: string }>>([
+    { id: 'root', name: 'Credit Decision Engine' },
+  ]);
+  
+  const currentFlow = flowDefinitions[currentFlowId] || flowDefinitions.root;
+  const [nodes, setNodes, onNodesChange] = useNodesState(currentFlow.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(currentFlow.edges);
+  const [selectedTreeId, setSelectedTreeId] = useState<string | null>('root');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
   const [activeTestTab, setActiveTestTab] = useState<string>('all');
   const [expandedTreeIds, setExpandedTreeIds] = useState<Set<string>>(
     new Set(['root', 'risk'])
   );
+
+  const { fitView } = useReactFlow();
+
+  // Update nodes/edges when flow changes
+  useEffect(() => {
+    const flow = flowDefinitions[currentFlowId] || flowDefinitions.root;
+    setNodes(flow.nodes);
+    setEdges(flow.edges);
+    setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+  }, [currentFlowId, setNodes, setEdges, fitView]);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -115,6 +319,40 @@ export default function EditorPage() {
       newExpanded.add(id);
     }
     setExpandedTreeIds(newExpanded);
+  };
+
+  const navigateToFlow = (flowId: string, flowName: string) => {
+    if (flowDefinitions[flowId]) {
+      setCurrentFlowId(flowId);
+      const newBreadcrumb = [...breadcrumb];
+      const existingIndex = newBreadcrumb.findIndex((b) => b.id === flowId);
+      if (existingIndex >= 0) {
+        newBreadcrumb.splice(existingIndex + 1);
+      } else {
+        newBreadcrumb.push({ id: flowId, name: flowName });
+      }
+      setBreadcrumb(newBreadcrumb);
+      setSelectedNodeId(null);
+    }
+  };
+
+  const handleTreeClick = (node: RuleTreeNode) => {
+    setSelectedTreeId(node.id);
+    setSelectedNodeId(null);
+
+    // Navigate to flow if it exists
+    if (flowDefinitions[node.id]) {
+      navigateToFlow(node.id, node.name);
+    } else {
+      // Focus on node in current flow
+      const graphNode = nodes.find((n) => {
+        const nodeData = n.data as FlowNodeData;
+        return nodeData.label.toLowerCase().includes(node.name.toLowerCase());
+      });
+      if (graphNode) {
+        setSelectedNodeId(graphNode.id);
+      }
+    }
   };
 
   const renderTreeNode = (node: RuleTreeNode, depth: number = 0): JSX.Element => {
@@ -135,8 +373,7 @@ export default function EditorPage() {
             if (hasChildren) {
               toggleTreeExpand(node.id);
             }
-            setSelectedTreeId(node.id);
-            setSelectedNodeId(null);
+            handleTreeClick(node);
           }}
         >
           {hasChildren && (
@@ -165,13 +402,18 @@ export default function EditorPage() {
   const getSelectedInfo = () => {
     if (selectedNodeId) {
       const node = nodes.find((n) => n.id === selectedNodeId);
-      return {
-        name: node?.data.label || 'Unknown',
-        type: 'Graph Node',
-        complexity: 'Medium',
-        sourceFiles: ['CreditService.java', 'business-rules.xml'],
-        status: 'Active',
-      };
+      if (node) {
+        const nodeData = node.data as FlowNodeData;
+        return {
+          name: nodeData.label,
+          flow: breadcrumb[breadcrumb.length - 1].name,
+          type: nodeData.type,
+          description: nodeData.description || 'Business logic node in the decision flow.',
+          childFlowId: nodeData.childFlowId,
+          sourceFiles: ['CreditService.java', 'business-rules.xml'],
+          status: 'Active',
+        };
+      }
     }
     if (selectedTreeId && selectedTreeId !== 'root') {
       const findNode = (tree: RuleTreeNode): RuleTreeNode | null => {
@@ -188,8 +430,10 @@ export default function EditorPage() {
       if (treeNode) {
         return {
           name: treeNode.name,
-          type: 'Business Logic Domain',
-          complexity: treeNode.id === 'risk' ? 'High' : 'Medium',
+          flow: breadcrumb[breadcrumb.length - 1].name,
+          type: 'domain',
+          description: 'Business logic domain containing multiple decision rules.',
+          childFlowId: flowDefinitions[treeNode.id] ? treeNode.id : undefined,
           sourceFiles: ['RuleService.java', 'domain-rules.xml'],
           status: 'Mapped',
         };
@@ -205,18 +449,43 @@ export default function EditorPage() {
       {/* Top Toolbar */}
       <div className="bg-panel-bg-secondary border-b border-border px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="text-text-strong font-medium">
-            Credit Decision Engine
+          <div className="flex items-center gap-2 text-text-strong">
+            {breadcrumb.map((crumb, index) => (
+              <div key={crumb.id} className="flex items-center gap-2">
+                {index > 0 && <span className="text-text-subtle">/</span>}
+                <button
+                  className={`font-medium hover:text-accent-blue transition-colors ${
+                    index === breadcrumb.length - 1 ? 'text-accent-blue' : ''
+                  }`}
+                  onClick={() => {
+                    if (index < breadcrumb.length - 1) {
+                      navigateToFlow(crumb.id, crumb.name);
+                    }
+                  }}
+                >
+                  {crumb.name}
+                </button>
+              </div>
+            ))}
           </div>
           <div className="flex gap-2">
-            <button className="btn-secondary text-sm px-3 py-1">Back</button>
-            <button className="btn-secondary text-sm px-3 py-1">
-              Expand All
+            {breadcrumb.length > 1 && (
+              <button
+                className="btn-secondary text-sm px-3 py-1"
+                onClick={() => {
+                  const parent = breadcrumb[breadcrumb.length - 2];
+                  navigateToFlow(parent.id, parent.name);
+                }}
+              >
+                Back
+              </button>
+            )}
+            <button
+              className="btn-secondary text-sm px-3 py-1"
+              onClick={() => fitView({ padding: 0.2, duration: 300 })}
+            >
+              Fit View
             </button>
-            <button className="btn-secondary text-sm px-3 py-1">
-              Collapse All
-            </button>
-            <button className="btn-secondary text-sm px-3 py-1">Fit View</button>
           </div>
         </div>
         <div className="flex gap-2">
@@ -251,6 +520,14 @@ export default function EditorPage() {
               setSelectedNodeId(node.id);
               setSelectedTreeId(null);
             }}
+            onNodeDoubleClick={(_, node) => {
+              const nodeData = node.data as FlowNodeData;
+              const childFlowId = nodeData.childFlowId;
+              if (childFlowId && flowDefinitions[childFlowId]) {
+                navigateToFlow(childFlowId, nodeData.label);
+              }
+            }}
+            nodeTypes={nodeTypes}
             fitView
             className="bg-panel-bg"
           >
@@ -274,27 +551,34 @@ export default function EditorPage() {
                 <div>
                   <div className="text-xs text-text-subtle mb-1">Name</div>
                   <div className="text-sm font-medium text-text-strong">
-                    {String(selectedInfo.name)}
+                    {selectedInfo.name}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-text-subtle mb-1">Flow</div>
+                  <div className="text-sm text-text-strong">
+                    {selectedInfo.flow}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-text-subtle mb-1">Type</div>
-                  <div className="text-sm text-text-strong">
+                  <div className="text-sm text-text-strong uppercase">
                     {selectedInfo.type}
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs text-text-subtle mb-1">Complexity</div>
-                  <div
-                    className={`text-sm font-medium ${
-                      selectedInfo.complexity === 'High'
-                        ? 'text-warning-yellow'
-                        : 'text-accent-blue'
-                    }`}
-                  >
-                    {selectedInfo.complexity}
+                  <div className="text-xs text-text-subtle mb-1">Description</div>
+                  <div className="text-sm text-text-muted">
+                    {selectedInfo.description}
                   </div>
                 </div>
+                {selectedInfo.childFlowId && (
+                  <div className="p-2 bg-accent-blue/10 border border-accent-blue rounded">
+                    <div className="text-xs text-accent-blue font-medium">
+                      💡 Double-click node to open child flow
+                    </div>
+                  </div>
+                )}
                 <div>
                   <div className="text-xs text-text-subtle mb-1">Status</div>
                   <span className="inline-block px-2 py-0.5 text-xs font-medium bg-success-green/20 text-success-green rounded">
