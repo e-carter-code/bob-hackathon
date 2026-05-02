@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Node,
@@ -12,7 +12,7 @@ import {
   Connection,
   useReactFlow,
   NodeProps,
-  ReactFlowProvider,
+  useViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -72,6 +72,13 @@ function BusinessNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
         <div className="text-[13px] font-medium text-text-strong leading-tight">
           {nodeData.label}
         </div>
+        {nodeData.childFlowId && selected && (
+          <div className="mt-2 pt-2 border-t border-accent-blue/30">
+            <div className="text-[10px] text-text-subtle">
+              Double-click or zoom deeply to reveal child flow
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -296,16 +303,54 @@ function EditorPageInner() {
   const [expandedTreeIds, setExpandedTreeIds] = useState<Set<string>>(
     new Set(['root', 'risk'])
   );
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const semanticZoomTriggeredRef = useRef(false);
 
-  const { fitView, zoomIn, zoomOut } = useReactFlow();
+  const { fitView } = useReactFlow();
+  const { zoom } = useViewport();
+
+  const SEMANTIC_ZOOM_THRESHOLD = 1.65;
 
   // Update nodes/edges when flow changes
   useEffect(() => {
     const flow = flowDefinitions[currentFlowId] || flowDefinitions.root;
     setNodes(flow.nodes);
     setEdges(flow.edges);
-    setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+    setIsTransitioning(true);
+    setTimeout(() => {
+      fitView({ padding: 0.2, duration: 300 });
+      setTimeout(() => {
+        setIsTransitioning(false);
+        semanticZoomTriggeredRef.current = false;
+      }, 350);
+    }, 50);
   }, [currentFlowId, setNodes, setEdges, fitView]);
+
+  // Semantic zoom behavior
+  useEffect(() => {
+    if (isTransitioning || semanticZoomTriggeredRef.current) return;
+    if (zoom < SEMANTIC_ZOOM_THRESHOLD) {
+      semanticZoomTriggeredRef.current = false;
+      return;
+    }
+
+    // Only trigger if selected node has childFlowId
+    if (selectedNodeId) {
+      const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+      if (selectedNode) {
+        const nodeData = selectedNode.data as FlowNodeData;
+        if (nodeData.childFlowId && flowDefinitions[nodeData.childFlowId]) {
+          semanticZoomTriggeredRef.current = true;
+          navigateToFlow(nodeData.childFlowId, nodeData.label);
+        }
+      }
+    }
+  }, [zoom, selectedNodeId, nodes, isTransitioning]);
+
+  // Reset semantic zoom trigger when selection changes
+  useEffect(() => {
+    semanticZoomTriggeredRef.current = false;
+  }, [selectedNodeId]);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -483,14 +528,20 @@ function EditorPageInner() {
             )}
             <button
               className="btn-secondary text-sm px-3 py-1 font-semibold"
-              onClick={() => zoomIn({ duration: 300 })}
+              onClick={() => {
+                const reactFlow = useReactFlow();
+                reactFlow.zoomIn({ duration: 300 });
+              }}
               title="Zoom In"
             >
               Zoom In
             </button>
             <button
               className="btn-secondary text-sm px-3 py-1 font-semibold"
-              onClick={() => zoomOut({ duration: 300 })}
+              onClick={() => {
+                const reactFlow = useReactFlow();
+                reactFlow.zoomOut({ duration: 300 });
+              }}
               title="Zoom Out"
             >
               Zoom Out
