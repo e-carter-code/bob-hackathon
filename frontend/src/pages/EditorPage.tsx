@@ -13,6 +13,7 @@ import {
   useReactFlow,
   NodeProps,
   useViewport,
+  ReactFlowProvider,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -729,6 +730,16 @@ function EditorPageInner() {
     </div>
   );
 }
+
+export default function EditorPage() {
+  return (
+    <ReactFlowProvider>
+      <EditorPageInner />
+    </ReactFlowProvider>
+  );
+}
+
+// Made with Bob
 
 export default function EditorPage() {
   return (
