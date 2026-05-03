@@ -11,6 +11,7 @@ import {
 import SyntaxCodeViewer from '../components/modernization/SyntaxCodeViewer';
 import { LOAN_APPROVALS_LEAF_SNIPPETS } from '../data/analysisLeafSnippets';
 import {
+  LOAN_APPROVALS_COBOL_SYSTEM_SUMMARY,
   LOAN_APPROVALS_DEFAULT_EXPANDED,
   LOAN_APPROVALS_DOMAIN_DETAILS,
   LOAN_APPROVALS_EDITABLE_RULES_TOTAL,
@@ -18,6 +19,8 @@ import {
   LOAN_APPROVALS_LEAF_TO_DOMAIN,
   LOAN_APPROVALS_SUMMARY,
 } from '../data/analysisLoanApprovalsCobol';
+
+const cobolSystemSummary = LOAN_APPROVALS_COBOL_SYSTEM_SUMMARY;
 
 interface LogicNode {
   id: string;
@@ -33,7 +36,6 @@ interface DomainDetails {
   rulesFound: number;
   editableRules: number;
   sourceFiles: string[];
-  rules?: CobolRule[];
 }
 
 function resolveDomainDetails(selectedId: string): DomainDetails | undefined {
@@ -87,7 +89,7 @@ export default function AnalysisPage() {
     setExpandedIds(newExpanded);
   };
 
-  const renderNode = (node: CobolLogicNode, depth: number = 0): JSX.Element => {
+  const renderNode = (node: LogicNode, depth: number = 0): JSX.Element => {
     const hasChildren = node.children && node.children.length > 0;
     const isExpanded = expandedIds.has(node.id);
     const isSelected = selectedId === node.id;
@@ -126,9 +128,7 @@ export default function AnalysisPage() {
         </div>
         {hasChildren && isExpanded && (
           <div>
-            {node.children!.map((child: CobolLogicNode) =>
-              renderNode(child, depth + 1)
-            )}
+            {node.children!.map((child: LogicNode) => renderNode(child, depth + 1))}
           </div>
         )}
       </div>

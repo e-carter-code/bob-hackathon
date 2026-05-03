@@ -218,6 +218,16 @@ export const LOAN_APPROVALS_SUMMARY = {
   nestedFlows: 2,
 };
 
+/** Analysis page “Modernization Readiness” card (LNMAIN, LNRULES, LNRATE + copybook loan / decision codes). */
+export const LOAN_APPROVALS_COBOL_SYSTEM_SUMMARY = {
+  /** Programs: LNMAIN.cbl, LNRULES.cbl, LNRATE.cbl */
+  programs: 3,
+  /** APPLICANT.cpy 88-levels: MT, AU, PL */
+  loanTypes: ['MT', 'AU', 'PL'],
+  /** DECISION.cpy decision codes */
+  decisionTypes: ['A', 'R', 'D'],
+} as const;
+
 /** Leaf/detail ids map to their parent domain for the details panel. */
 export const LOAN_APPROVALS_LEAF_TO_DOMAIN: Record<string, string> = {
   'lnmain-open': 'batch-io',
