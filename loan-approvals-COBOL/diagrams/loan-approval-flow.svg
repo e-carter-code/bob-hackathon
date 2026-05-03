@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1320" viewBox="0 0 1400 1320" role="img" aria-labelledby="title desc">
+  <title id="title">Bank Loan Approval Business Logic Flow</title>
+  <desc id="desc">Flow chart showing fixed-width input processing, hard decline rules, down payment checks, risk grading, manual review, APR calculation, and approval or decline output.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f6f8fb; }
+      .title { font: 700 34px Georgia, serif; fill: #122033; }
+      .subtitle { font: 400 18px Georgia, serif; fill: #5c6778; }
+      .node { stroke-width: 2.5; rx: 14; ry: 14; }
+      .process { fill: #ffffff; stroke: #2c5f8f; }
+      .decision { fill: #fff8e8; stroke: #b36b00; }
+      .approve { fill: #eaf8ef; stroke: #197b44; }
+      .review { fill: #edf2ff; stroke: #3559b7; }
+      .decline { fill: #fff0f0; stroke: #b42318; }
+      .output { fill: #f2eef9; stroke: #6d4c9b; }
+      .label { font: 600 18px Georgia, serif; fill: #172033; text-anchor: middle; dominant-baseline: middle; }
+      .small { font: 500 15px Georgia, serif; fill: #38465a; text-anchor: middle; dominant-baseline: middle; }
+      .edge { fill: none; stroke: #506078; stroke-width: 2.4; marker-end: url(#arrow); }
+      .edge-approve { fill: none; stroke: #197b44; stroke-width: 2.6; marker-end: url(#arrow-approve); }
+      .edge-review { fill: none; stroke: #3559b7; stroke-width: 2.6; marker-end: url(#arrow-review); }
+      .edge-decline { fill: none; stroke: #b42318; stroke-width: 2.6; marker-end: url(#arrow-decline); }
+      .edge-label { font: 600 14px Georgia, serif; fill: #233047; paint-order: stroke; stroke: #f6f8fb; stroke-width: 5; stroke-linejoin: round; }
+      .legend-title { font: 700 17px Georgia, serif; fill: #122033; }
+      .legend-text { font: 500 15px Georgia, serif; fill: #38465a; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#506078"/>
+    </marker>
+    <marker id="arrow-approve" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#197b44"/>
+    </marker>
+    <marker id="arrow-review" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#3559b7"/>
+    </marker>
+    <marker id="arrow-decline" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#b42318"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1400" height="1320"/>
+  <text class="title" x="700" y="58">Bank Loan Approval Business Logic Flow</text>
+  <text class="subtitle" x="700" y="92" text-anchor="middle">Legacy COBOL batch process for hackathon modernization demo</text>
+
+  <rect class="node process" x="520" y="130" width="360" height="72"/>
+  <text class="label" x="700" y="166">Start Batch Job</text>
+
+  <rect class="node process" x="500" y="245" width="400" height="86"/>
+  <text class="label" x="700" y="278">Read Fixed-Width</text>
+  <text class="small" x="700" y="304">Loan Application Record</text>
+
+  <rect class="node process" x="500" y="375" width="400" height="94"/>
+  <text class="label" x="700" y="407">Calculate Ratios</text>
+  <text class="small" x="700" y="433">DTI, loan-to-income, down payment %</text>
+
+  <path class="node decision" d="M700 515 L900 615 L700 715 L500 615 Z"/>
+  <text class="label" x="700" y="595">Hard Decline</text>
+  <text class="small" x="700" y="622">Rules Pass?</text>
+  <text class="small" x="700" y="648">score, DTI, LTI, job, bankruptcy</text>
+
+  <path class="node decision" d="M700 760 L900 860 L700 960 L500 860 Z"/>
+  <text class="label" x="700" y="840">Down Payment</text>
+  <text class="small" x="700" y="867">Nested Rule</text>
+  <text class="small" x="700" y="893">mortgage / auto / personal</text>
+
+  <path class="node decision" d="M700 1005 L900 1105 L700 1205 L500 1105 Z"/>
+  <text class="label" x="700" y="1085">Risk Grade</text>
+  <text class="small" x="700" y="1112">Nested Rule</text>
+  <text class="small" x="700" y="1138">credit score + DTI</text>
+
+  <rect class="node decline" x="80" y="580" width="320" height="90"/>
+  <text class="label" x="240" y="612">Decline Loan</text>
+  <text class="small" x="240" y="640">Return policy reason code</text>
+
+  <rect class="node review" x="965" y="815" width="330" height="90"/>
+  <text class="label" x="1130" y="847">Manual Review</text>
+  <text class="small" x="1130" y="875">Borderline or exception case</text>
+
+  <rect class="node approve" x="965" y="1060" width="330" height="90"/>
+  <text class="label" x="1130" y="1092">Calculate APR</text>
+  <text class="small" x="1130" y="1120">Base rate + risk adjustment</text>
+
+  <rect class="node approve" x="965" y="1190" width="330" height="80"/>
+  <text class="label" x="1130" y="1230">Approve Loan</text>
+
+  <rect class="node output" x="500" y="1245" width="400" height="72"/>
+  <text class="label" x="700" y="1281">Print Decision Line</text>
+
+  <path class="edge" d="M700 202 L700 245"/>
+  <path class="edge" d="M700 331 L700 375"/>
+  <path class="edge" d="M700 469 L700 515"/>
+  <path class="edge-approve" d="M700 715 L700 760"/>
+  <text class="edge-label" x="717" y="742">Yes</text>
+
+  <path class="edge-decline" d="M500 615 L400 615"/>
+  <text class="edge-label" x="438" y="598">No</text>
+
+  <path class="edge-approve" d="M700 960 L700 1005"/>
+  <text class="edge-label" x="716" y="987">Pass</text>
+
+  <path class="edge-review" d="M900 860 L965 860"/>
+  <text class="edge-label" x="920" y="840">Borderline</text>
+
+  <path class="edge-decline" d="M520 860 C420 850 360 760 300 670"/>
+  <text class="edge-label" x="374" y="774">Too low</text>
+
+  <path class="edge-review" d="M900 1105 L965 1105"/>
+  <text class="edge-label" x="915" y="1085">Review</text>
+
+  <path class="edge-approve" d="M840 1160 C890 1208 915 1230 965 1230"/>
+  <text class="edge-label" x="904" y="1194">Approve</text>
+
+  <path class="edge-decline" d="M535 1145 C425 1115 292 825 250 670"/>
+  <text class="edge-label" x="354" y="995">Decline</text>
+
+  <path class="edge-approve" d="M1130 1150 L1130 1190"/>
+  <path class="edge" d="M965 1230 C920 1230 900 1265 900 1281"/>
+  <path class="edge" d="M965 860 C920 860 905 1265 900 1281"/>
+  <path class="edge" d="M240 670 C270 1040 440 1281 500 1281"/>
+
+  <rect x="80" y="150" width="330" height="245" rx="10" fill="#ffffff" stroke="#c8d1de" stroke-width="1.5"/>
+  <text class="legend-title" x="105" y="185">Hard Decline Rules</text>
+  <text class="legend-text" x="105" y="220">1. Credit score below 580</text>
+  <text class="legend-text" x="105" y="250">2. DTI above 43%</text>
+  <text class="legend-text" x="105" y="280">3. Loan over 5x annual income</text>
+  <text class="legend-text" x="105" y="310">4. Employment under 24 months</text>
+  <text class="legend-text" x="105" y="340">5. Bankruptcy within 7 years</text>
+  <text class="legend-text" x="105" y="370">6. More than 2 delinquencies</text>
+
+  <rect x="965" y="150" width="330" height="245" rx="10" fill="#ffffff" stroke="#c8d1de" stroke-width="1.5"/>
+  <text class="legend-title" x="990" y="185">Final Outcomes</text>
+  <rect class="approve" x="990" y="210" width="32" height="20" rx="4"/>
+  <text class="legend-text" x="1038" y="226">Approved with APR</text>
+  <rect class="review" x="990" y="250" width="32" height="20" rx="4"/>
+  <text class="legend-text" x="1038" y="266">Manual underwriting review</text>
+  <rect class="decline" x="990" y="290" width="32" height="20" rx="4"/>
+  <text class="legend-text" x="1038" y="306">Declined with reason code</text>
+  <rect class="decision" x="990" y="330" width="32" height="20" rx="4"/>
+  <text class="legend-text" x="1038" y="346">Policy decision point</text>
+</svg>

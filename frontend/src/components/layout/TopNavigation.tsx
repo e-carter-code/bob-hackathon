@@ -1,58 +1,41 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Upload, BarChart3, Workflow, FileText } from 'lucide-react';
+import { Home } from 'lucide-react';
 
 export default function TopNavigation() {
-  const location = useLocation();
-
-  const navItems = [
-    { path: '/', label: 'Home', icon: Home },
-    { path: '/upload', label: 'Upload', icon: Upload },
-    { path: '/analysis', label: 'Analysis', icon: BarChart3 },
-    { path: '/editor', label: 'Editor', icon: Workflow },
-    { path: '/report', label: 'Report', icon: FileText },
-  ];
+  const { pathname } = useLocation();
+  const onHome = pathname === '/';
 
   return (
-    <nav className="bg-panel-bg border-b border-border">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo/Brand */}
-          <div className="flex items-center">
-            <Link to="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-ibm-blue rounded-lg flex items-center justify-center">
-                <Workflow className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-text-strong font-semibold text-lg">
-                Legacy Logic Studio
-              </span>
-            </Link>
-          </div>
-
-          {/* Navigation Links */}
-          <div className="flex items-center space-x-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`
-                    flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors
-                    ${isActive 
-                      ? 'bg-ibm-blue text-white' 
-                      : 'text-text-muted hover:text-text-primary hover:bg-panel-bg-secondary'
-                    }
-                  `}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="font-medium">{item.label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+    <nav className="border-b border-border bg-panel-bg">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <Link
+          to="/"
+          aria-label="BLTM home"
+          className="flex min-w-0 items-center gap-3 rounded-lg outline-none ring-offset-2 ring-offset-app-bg focus-visible:ring-2 focus-visible:ring-live-cyan sm:gap-3.5"
+        >
+          <img
+            src="/logo.png"
+            alt=""
+            width={50}
+            height={50}
+            className="h-[50px] w-[50px] shrink-0 object-contain object-center"
+            decoding="async"
+          />
+          <span className="min-w-0 truncate text-base font-bold leading-none tracking-tight text-text-strong sm:text-lg">
+            BLT<span className="text-live-sky">M</span>
+          </span>
+        </Link>
+        <Link
+          to="/"
+          className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            onHome
+              ? 'bg-live-sky/95 text-[#0a1628] shadow-[0_0_20px_-4px_rgba(125,211,252,0.55)]'
+              : 'text-text-muted hover:bg-panel-bg-secondary hover:text-live-sky'
+          }`}
+        >
+          <Home className="h-4 w-4 shrink-0" aria-hidden />
+          <span className="hidden sm:inline">Home</span>
+        </Link>
       </div>
     </nav>
   );
