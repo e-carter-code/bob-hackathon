@@ -33,6 +33,7 @@ interface DomainDetails {
   rulesFound: number;
   editableRules: number;
   sourceFiles: string[];
+  rules?: CobolRule[];
 }
 
 function resolveDomainDetails(selectedId: string): DomainDetails | undefined {
@@ -86,7 +87,7 @@ export default function AnalysisPage() {
     setExpandedIds(newExpanded);
   };
 
-  const renderNode = (node: LogicNode, depth: number = 0): JSX.Element => {
+  const renderNode = (node: CobolLogicNode, depth: number = 0): JSX.Element => {
     const hasChildren = node.children && node.children.length > 0;
     const isExpanded = expandedIds.has(node.id);
     const isSelected = selectedId === node.id;
@@ -125,7 +126,9 @@ export default function AnalysisPage() {
         </div>
         {hasChildren && isExpanded && (
           <div>
-            {node.children!.map((child) => renderNode(child, depth + 1))}
+            {node.children!.map((child: CobolLogicNode) =>
+              renderNode(child, depth + 1)
+            )}
           </div>
         )}
       </div>
@@ -173,7 +176,7 @@ export default function AnalysisPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card min-w-0">
           <h2 className="text-xl font-semibold text-text-strong mb-4">
-            Business Logic Hierarchy
+            COBOL Business Logic Hierarchy
           </h2>
           <div className="space-y-1">{renderNode(hierarchy)}</div>
         </div>
@@ -344,15 +347,15 @@ export default function AnalysisPage() {
           </h3>
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-text-muted">Rule Extraction</span>
-              <span className="text-sm font-medium text-success-green">
-                Ready
+              <span className="text-sm text-text-muted">COBOL Programs</span>
+              <span className="text-sm font-medium text-text-strong">
+                {cobolSystemSummary.programs}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-text-muted">Visual Flow</span>
-              <span className="text-sm font-medium text-success-green">
-                Ready
+              <span className="text-sm text-text-muted">Loan Types</span>
+              <span className="text-sm font-medium text-accent-blue">
+                {cobolSystemSummary.loanTypes.length}
               </span>
             </div>
             <div className="flex justify-between items-center">
@@ -362,9 +365,9 @@ export default function AnalysisPage() {
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-text-muted">Report Generation</span>
+              <span className="text-sm text-text-muted">Decision Types</span>
               <span className="text-sm font-medium text-success-green">
-                Ready
+                {cobolSystemSummary.decisionTypes.length}
               </span>
             </div>
           </div>
