@@ -1,10 +1,14 @@
 import { useState } from 'react';
-
-interface LogicNode {
-  id: string;
-  name: string;
-  children?: LogicNode[];
-}
+import {
+  cobolLogicHierarchy,
+  cobolSystemSummary,
+  hardDeclineRules,
+  downPaymentRules,
+  riskGradeRules,
+  aprCalculationRules,
+  type CobolLogicNode,
+  type CobolRule,
+} from '../data/cobolLoanData';
 
 interface DomainDetails {
   name: string;
@@ -14,100 +18,82 @@ interface DomainDetails {
   editableRules: number;
   testsCovering: number;
   sourceFiles: string[];
+  rules?: CobolRule[];
 }
 
-const mockHierarchy: LogicNode = {
-  id: 'root',
-  name: 'Credit Decision Engine',
-  children: [
-    {
-      id: 'applicant',
-      name: 'Applicant Eligibility',
-      children: [
-        { id: 'identity', name: 'Identity Verification' },
-        { id: 'age', name: 'Age Requirement' },
-        { id: 'residency', name: 'Residency Rule' },
-      ],
-    },
-    {
-      id: 'risk',
-      name: 'Risk Assessment',
-      children: [
-        { id: 'credit-score', name: 'Credit Score Evaluation' },
-        { id: 'debt-ratio', name: 'Debt-to-Income Ratio' },
-        { id: 'fraud', name: 'Fraud Signal Check' },
-        { id: 'manual-review', name: 'Manual Review Trigger' },
-      ],
-    },
-    {
-      id: 'pricing',
-      name: 'Pricing & Offer Calculation',
-      children: [
-        { id: 'base-apr', name: 'Base APR Calculation' },
-        { id: 'risk-adj', name: 'Risk Adjustment' },
-        { id: 'loyalty', name: 'Loyalty Discount' },
-      ],
-    },
-    {
-      id: 'routing',
-      name: 'Final Decision Routing',
-      children: [
-        { id: 'approval', name: 'Approval Path' },
-        { id: 'rejection', name: 'Rejection Path' },
-        { id: 'manual', name: 'Manual Review Path' },
-      ],
-    },
-  ],
-};
-
 const domainDetailsMap: Record<string, DomainDetails> = {
-  risk: {
-    name: 'Risk Assessment',
+  'hard-decline-rules': {
+    name: 'Hard Decline Rules',
+    complexity: 'High',
+    nestedDepth: 1,
+    rulesFound: 6,
+    editableRules: 6,
+    testsCovering: 5,
+    sourceFiles: ['LNRULES.cbl'],
+    rules: hardDeclineRules,
+  },
+  'down-payment-rule': {
+    name: 'Down Payment Rule (Nested)',
     complexity: 'High',
     nestedDepth: 3,
-    rulesFound: 12,
-    editableRules: 4,
-    testsCovering: 5,
-    sourceFiles: [
-      'CreditApprovalService.java',
-      'RiskScoringService.java',
-      'FraudCheckService.java',
-      'credit-rules.xml',
-    ],
-  },
-  applicant: {
-    name: 'Applicant Eligibility',
-    complexity: 'Low',
-    nestedDepth: 2,
-    rulesFound: 8,
+    rulesFound: 3,
     editableRules: 3,
-    testsCovering: 3,
-    sourceFiles: ['ApplicantService.java', 'eligibility-rules.xml'],
+    testsCovering: 2,
+    sourceFiles: ['LNRULES.cbl'],
+    rules: downPaymentRules,
   },
-  pricing: {
-    name: 'Pricing & Offer Calculation',
+  'risk-grade-rule': {
+    name: 'Risk Grade Rule (Nested)',
+    complexity: 'High',
+    nestedDepth: 3,
+    rulesFound: 7,
+    editableRules: 7,
+    testsCovering: 4,
+    sourceFiles: ['LNRULES.cbl'],
+    rules: riskGradeRules,
+  },
+  'apr-calculation': {
+    name: 'APR Calculation',
     complexity: 'Medium',
     nestedDepth: 2,
-    rulesFound: 10,
-    editableRules: 2,
-    testsCovering: 4,
-    sourceFiles: ['PricingService.java', 'pricing-rules.xml'],
+    rulesFound: 7,
+    editableRules: 7,
+    testsCovering: 3,
+    sourceFiles: ['LNRATE.cbl'],
+    rules: aprCalculationRules,
   },
-  routing: {
-    name: 'Final Decision Routing',
+  'ratio-calculations': {
+    name: 'Financial Ratio Calculations',
     complexity: 'Low',
+    nestedDepth: 1,
+    rulesFound: 3,
+    editableRules: 0,
+    testsCovering: 3,
+    sourceFiles: ['LNRULES.cbl'],
+  },
+  'final-decision': {
+    name: 'Final Decision Logic',
+    complexity: 'Medium',
     nestedDepth: 2,
-    rulesFound: 8,
-    editableRules: 1,
-    testsCovering: 2,
-    sourceFiles: ['DecisionRouter.java', 'routing-rules.xml'],
+    rulesFound: 3,
+    editableRules: 3,
+    testsCovering: 3,
+    sourceFiles: ['LNRULES.cbl'],
   },
 };
 
 export default function AnalysisPage() {
-  const [selectedId, setSelectedId] = useState<string>('risk');
+  const [selectedId, setSelectedId] = useState<string>('hard-decline-rules');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
-    new Set(['root', 'applicant', 'risk', 'pricing', 'routing'])
+    new Set([
+      'root',
+      'ratio-calculations',
+      'hard-decline-rules',
+      'down-payment-rule',
+      'risk-grade-rule',
+      'final-decision',
+      'apr-calculation',
+    ])
   );
 
   const toggleExpand = (id: string) => {
@@ -120,7 +106,7 @@ export default function AnalysisPage() {
     setExpandedIds(newExpanded);
   };
 
-  const renderNode = (node: LogicNode, depth: number = 0): JSX.Element => {
+  const renderNode = (node: CobolLogicNode, depth: number = 0): JSX.Element => {
     const hasChildren = node.children && node.children.length > 0;
     const isExpanded = expandedIds.has(node.id);
     const isSelected = selectedId === node.id;
@@ -159,7 +145,9 @@ export default function AnalysisPage() {
         </div>
         {hasChildren && isExpanded && (
           <div>
-            {node.children!.map((child) => renderNode(child, depth + 1))}
+            {node.children!.map((child: CobolLogicNode) =>
+              renderNode(child, depth + 1)
+            )}
           </div>
         )}
       </div>
@@ -175,31 +163,41 @@ export default function AnalysisPage() {
           Analysis Dashboard
         </h1>
         <p className="text-text-muted">
-          Nested business logic hierarchy and complexity analysis
+          {cobolSystemSummary.projectName} - COBOL Legacy System Analysis
         </p>
       </div>
 
       {/* Summary Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="card">
-          <div className="text-text-subtle text-sm mb-1">Files Scanned</div>
-          <div className="text-3xl font-bold text-text-strong">143</div>
+          <div className="text-text-subtle text-sm mb-1">COBOL Programs</div>
+          <div className="text-3xl font-bold text-text-strong">
+            {cobolSystemSummary.programs}
+          </div>
         </div>
         <div className="card">
           <div className="text-text-subtle text-sm mb-1">Logic Domains</div>
-          <div className="text-3xl font-bold text-text-strong">5</div>
+          <div className="text-3xl font-bold text-text-strong">
+            {cobolLogicHierarchy.children?.length || 0}
+          </div>
         </div>
         <div className="card">
-          <div className="text-text-subtle text-sm mb-1">Rules</div>
-          <div className="text-3xl font-bold text-text-strong">38</div>
+          <div className="text-text-subtle text-sm mb-1">Business Rules</div>
+          <div className="text-3xl font-bold text-text-strong">
+            {cobolSystemSummary.totalRules}
+          </div>
         </div>
         <div className="card">
-          <div className="text-text-subtle text-sm mb-1">Nested Flows</div>
-          <div className="text-3xl font-bold text-text-strong">9</div>
+          <div className="text-text-subtle text-sm mb-1">Nested Rules</div>
+          <div className="text-3xl font-bold text-text-strong">
+            {cobolSystemSummary.nestedRules}
+          </div>
         </div>
         <div className="card">
-          <div className="text-text-subtle text-sm mb-1">Tests Detected</div>
-          <div className="text-3xl font-bold text-success-green">7</div>
+          <div className="text-text-subtle text-sm mb-1">Max Nesting</div>
+          <div className="text-3xl font-bold text-warning-yellow">
+            {cobolSystemSummary.maxNestingDepth}
+          </div>
         </div>
       </div>
 
@@ -208,9 +206,9 @@ export default function AnalysisPage() {
         {/* Left: Hierarchy */}
         <div className="lg:col-span-2 card">
           <h2 className="text-xl font-semibold text-text-strong mb-4">
-            Business Logic Hierarchy
+            COBOL Business Logic Hierarchy
           </h2>
-          <div className="space-y-1">{renderNode(mockHierarchy)}</div>
+          <div className="space-y-1">{renderNode(cobolLogicHierarchy)}</div>
         </div>
 
         {/* Right: Details Panel */}
@@ -297,6 +295,34 @@ export default function AnalysisPage() {
                   ))}
                 </div>
               </div>
+
+              {selectedDetails.rules && selectedDetails.rules.length > 0 && (
+                <div>
+                  <div className="text-sm text-text-subtle mb-2">
+                    Rules in This Domain
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {selectedDetails.rules.map((rule) => (
+                      <div
+                        key={rule.id}
+                        className="text-xs bg-panel-bg-secondary p-2 rounded"
+                      >
+                        <div className="font-semibold text-text-strong mb-1">
+                          {rule.name}
+                        </div>
+                        <div className="text-text-muted font-mono">
+                          {rule.condition}
+                        </div>
+                        {rule.reasonText && (
+                          <div className="text-text-subtle mt-1 italic">
+                            {rule.reasonText}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-text-muted text-sm">
@@ -317,19 +343,19 @@ export default function AnalysisPage() {
             <div className="flex justify-between items-center">
               <span className="text-sm text-text-muted">High Complexity</span>
               <span className="text-sm font-medium text-warning-yellow">
-                Risk Assessment
+                Hard Decline Rules, Risk Grade
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-text-muted">Medium Complexity</span>
               <span className="text-sm font-medium text-accent-blue">
-                Pricing & Offer Calculation
+                APR Calculation, Final Decision
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-text-muted">Low Complexity</span>
               <span className="text-sm font-medium text-success-green">
-                Applicant Eligibility
+                Ratio Calculations
               </span>
             </div>
           </div>
@@ -342,20 +368,20 @@ export default function AnalysisPage() {
           </h3>
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-text-muted">Tests Detected</span>
-              <span className="text-sm font-medium text-text-strong">7</span>
+              <span className="text-sm text-text-muted">Sample Applicants</span>
+              <span className="text-sm font-medium text-text-strong">8</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-text-muted">Passing</span>
-              <span className="text-sm font-medium text-success-green">5</span>
+              <span className="text-sm text-text-muted">Approved</span>
+              <span className="text-sm font-medium text-success-green">2</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-text-muted">Failing</span>
-              <span className="text-sm font-medium text-error-red">1</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-text-muted">Warning</span>
+              <span className="text-sm text-text-muted">Manual Review</span>
               <span className="text-sm font-medium text-warning-yellow">1</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-text-muted">Declined</span>
+              <span className="text-sm font-medium text-error-red">5</span>
             </div>
           </div>
         </div>
@@ -367,25 +393,27 @@ export default function AnalysisPage() {
           </h3>
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-text-muted">Rule Extraction</span>
-              <span className="text-sm font-medium text-success-green">
-                Ready
+              <span className="text-sm text-text-muted">COBOL Programs</span>
+              <span className="text-sm font-medium text-text-strong">
+                {cobolSystemSummary.programs}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-text-muted">Visual Flow</span>
-              <span className="text-sm font-medium text-success-green">
-                Ready
+              <span className="text-sm text-text-muted">Loan Types</span>
+              <span className="text-sm font-medium text-accent-blue">
+                {cobolSystemSummary.loanTypes.length}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-text-muted">Editable Rules</span>
-              <span className="text-sm font-medium text-accent-blue">4</span>
+              <span className="text-sm text-text-muted">Risk Grades</span>
+              <span className="text-sm font-medium text-warning-yellow">
+                {cobolSystemSummary.riskGrades.length}
+              </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-text-muted">Report Generation</span>
+              <span className="text-sm text-text-muted">Decision Types</span>
               <span className="text-sm font-medium text-success-green">
-                Ready
+                {cobolSystemSummary.decisionTypes.length}
               </span>
             </div>
           </div>
