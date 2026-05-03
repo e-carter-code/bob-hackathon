@@ -1,9 +1,34 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronRight, Maximize2, Minimize2, Workflow } from 'lucide-react';
+import PageHeader from '../components/workflow/PageHeader';
+import { useWorkflow } from '../workflow/WorkflowContext';
+import {
+  BLTM_PROJECT_CHANGED,
+  projectDisplayName,
+  readProjectSession,
+} from '../workflow/projectSession';
+import {
+  LOAN_APPROVALS_DEFAULT_EXPANDED,
+  LOAN_APPROVALS_DOMAIN_DETAILS,
+  LOAN_APPROVALS_HIERARCHY_BASE,
+  LOAN_APPROVALS_LEAF_TO_DOMAIN,
+  type AnalysisLogicNode,
+} from '../data/analysisLoanApprovalsCobol';
+import {
+  EDITOR_LOAN_APPROVALS_FLOW_DEFINITIONS,
+  type EditorFlowNodeData,
+} from '../data/editorLoanApprovalsGraph';
+import { EDITOR_DOMAIN_DESCRIPTION, EDITOR_LEAF_BUSINESS_MEANING } from '../data/editorInspectorCopy';
+import {
+  buildEditorEditableRulesInitial,
+  prescreenGateLabel,
+  technicalExpressionFor,
+  type EditorEditableRule,
+} from '../data/editorPrescreenRules';
 import {
   ReactFlow,
   Node,
-  Edge,
-  Controls,
   Background,
   MiniMap,
   useNodesState,
@@ -14,108 +39,191 @@ import {
   NodeProps,
   Handle,
   Position,
-  MarkerType,
   ReactFlowProvider,
   useViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-interface RuleTreeNode {
-  id: string;
-  name: string;
-  children?: RuleTreeNode[];
+type FlowNodeData = EditorFlowNodeData;
+type EditableRule = EditorEditableRule;
+
+function mergeEditableRuleLabels(
+  nodeList: Node<FlowNodeData>[],
+  rules: Record<string, EditableRule>,
+): Node<FlowNodeData>[] {
+  return nodeList.map((node) => {
+    const d = node.data as FlowNodeData;
+    if (!d.ruleId) return node;
+    const rule = rules[d.ruleId];
+    if (!rule) return node;
+    return {
+      ...node,
+      data: {
+        ...d,
+        label: prescreenGateLabel(rule.id, rule.threshold),
+        isModified: rule.threshold !== rule.originalThreshold,
+      },
+    };
+  });
 }
 
-interface TestResult {
-  id: string;
-  status: 'PASS' | 'FAIL' | 'WARN';
-  name: string;
-  flowCovered: string;
-  duration: string;
-  executionPath: string[]; // node IDs in execution order
-  expectedPath: string[];
-  actualPath: string[];
-  failureNode?: string;
-  failureReason?: string;
+function thresholdFieldLabel(ruleId: string): string {
+  switch (ruleId) {
+    case 'gate-dti':
+      return 'Editable threshold (%)';
+    case 'gate-credit':
+    case 'gate-risk-floor':
+      return 'Editable threshold (minimum score)';
+    case 'gate-lti':
+      return 'Editable threshold (max multiple × income)';
+    case 'gate-emp':
+      return 'Editable threshold (months)';
+    case 'gate-bk':
+      return 'Editable threshold (years)';
+    case 'gate-del':
+      return 'Editable threshold (max count)';
+    case 'gate-down-mt':
+      return 'Editable threshold (%, mortgage minimum down)';
+    default:
+      return 'Editable threshold';
+  }
 }
 
-interface FlowNodeData extends Record<string, unknown> {
-  label: string;
-  type: 'start' | 'domain' | 'decision' | 'action' | 'output';
-  childFlowId?: string;
-  description?: string;
-  isEditable?: boolean;
-  ruleId?: string;
-  isModified?: boolean;
+/** Human-readable role for the pill on each graph node (internal `type` drives styling only). */
+function nodeRoleLabel(kind: FlowNodeData['type']): string {
+  switch (kind) {
+    case 'domain':
+      return 'Domain';
+    case 'start':
+      return 'Start';
+    case 'decision':
+      return 'Check';
+    case 'output':
+      return 'Outcome';
+    default:
+      return 'Step';
+  }
 }
 
-interface EditableRule {
-  id: string;
-  name: string;
-  parentFlow: string;
-  businessMeaning: string;
-  technicalExpression: string;
-  threshold: number;
-  originalThreshold: number;
-  sourceFiles: string[];
-  impactedFlows: string[];
-  testsNeedRerun: number;
+/** Bright border + tint per semantic type; pill uses matching accent so type reads at a glance. */
+function nodeTypeChrome(
+  kind: FlowNodeData['type'],
+  nodeId: string,
+): { card: string; pill: string } {
+  if (kind === 'output' && nodeId.startsWith('hd-fail-')) {
+    return {
+      card: 'border-2 border-live-rose bg-live-rose/[0.12] shadow-[0_0_14px_-3px_rgba(251,113,133,0.55)]',
+      pill: 'font-semibold uppercase tracking-wide text-live-rose',
+    };
+  }
+  if (kind === 'output') {
+    return {
+      card: 'border-2 border-success-green bg-success-green/[0.12] shadow-[0_0_14px_-3px_rgba(34,197,94,0.45)]',
+      pill: 'font-semibold uppercase tracking-wide text-success-green',
+    };
+  }
+  switch (kind) {
+    case 'domain':
+      return {
+        card: 'border-2 border-live-violet bg-live-violet/[0.12] shadow-[0_0_14px_-3px_rgba(192,132,252,0.45)]',
+        pill: 'font-semibold uppercase tracking-wide text-live-violet',
+      };
+    case 'start':
+      return {
+        card: 'border-2 border-ibm-blue bg-ibm-blue/[0.14] shadow-[0_0_14px_-3px_rgba(15,98,254,0.5)]',
+        pill: 'font-semibold uppercase tracking-wide text-live-sky',
+      };
+    case 'decision':
+      return {
+        card: 'border-2 border-live-cyan bg-live-cyan/[0.11] shadow-[0_0_14px_-3px_rgba(34,211,238,0.5)]',
+        pill: 'font-semibold uppercase tracking-wide text-live-cyan',
+      };
+    case 'action':
+    default:
+      return {
+        card: 'border-2 border-review-orange bg-review-orange/[0.11] shadow-[0_0_14px_-3px_rgba(249,115,22,0.45)]',
+        pill: 'font-semibold uppercase tracking-wide text-review-orange',
+      };
+  }
 }
 
-// Custom Business Node Component
-function BusinessNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
+type EditorInspectorPanel =
+  | {
+      mode: 'domain';
+      name: string;
+      flow: string;
+      typeLabel: string;
+      description: string;
+    }
+  | {
+      mode: 'step';
+      name: string;
+      parentName: string;
+      flow: string;
+      typeLabel: string;
+      businessMeaning: string;
+    };
+
+const handleClass = '!h-2.5 !w-2.5 !border-0 !bg-live-sky';
+
+// Custom graph node: handles + width tuned so labels can wrap (domain flows use long leaf titles).
+function BusinessNode({ id, data, selected }: NodeProps<Node<FlowNodeData>>) {
   const nodeData = data as FlowNodeData;
-  const typeColors = {
-    start: 'border-accent-blue bg-accent-blue/10',
-    domain: 'border-accent-purple bg-accent-purple/10',
-    decision: 'border-warning-yellow bg-warning-yellow/10',
-    action: 'border-success-green bg-success-green/10',
-    output: 'border-text-muted bg-panel-bg-secondary',
-  };
+  const role = nodeRoleLabel(nodeData.type);
+  const { card: tone, pill: pillClass } = nodeTypeChrome(nodeData.type, id);
+  const layout = nodeData.prescreenHandleLayout;
 
-  const typeLabels = {
-    start: 'START',
-    domain: 'DOMAIN',
-    decision: 'DECISION',
-    action: 'ACTION',
-    output: 'OUTPUT',
-  };
+  const handles =
+    layout === 'decline-in' ? (
+      <Handle id="in" type="target" position={Position.Right} className={handleClass} />
+    ) : layout === 'pass-in' ? (
+      <Handle id="in" type="target" position={Position.Top} className={handleClass} />
+    ) : layout === 'gate' ? (
+      <>
+        <Handle id="in" type="target" position={Position.Top} className={handleClass} />
+        <Handle id="yes" type="source" position={Position.Bottom} className={handleClass} />
+        <Handle
+          id="no"
+          type="source"
+          position={Position.Left}
+          className={`${handleClass} !left-0 !top-1/2 !-translate-y-1/2`}
+        />
+      </>
+    ) : (
+      <>
+        <Handle id="in" type="target" position={Position.Top} className={handleClass} />
+        <Handle id="out" type="source" position={Position.Bottom} className={handleClass} />
+      </>
+    );
 
   return (
     <div
-      className={`min-w-[200px] max-w-[240px] rounded border-2 transition-all ${
-        typeColors[nodeData.type]
-      } ${selected ? 'ring-2 ring-accent-blue shadow-lg' : ''}`}
+      className={`relative box-border min-h-[58px] w-[280px] max-w-[280px] rounded-lg shadow-sm transition-[box-shadow,ring] ${tone} ${
+        selected ? 'z-10 ring-2 ring-live-cyan ring-offset-2 ring-offset-panel-bg' : ''
+      }`}
+      title={nodeData.childFlowId ? 'Double-click or zoom in to open this area' : undefined}
     >
-      <Handle type="target" position={Position.Top} className="!bg-accent-blue !w-3 !h-3" />
-      <div className="px-3 py-2">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-bold text-text-subtle uppercase tracking-wide">
-            {typeLabels[nodeData.type]}
-          </span>
-          <div className="flex items-center gap-1">
-            {nodeData.isModified && (
-              <span className="text-[9px] font-bold text-warning-yellow bg-warning-yellow/20 px-1.5 py-0.5 rounded">
-                MODIFIED
-              </span>
-            )}
-            {nodeData.childFlowId && (
-              <span className="text-[10px] text-accent-blue font-medium">▸ OPEN</span>
-            )}
+      {handles}
+      <div className="flex min-h-[42px] flex-col px-2.5 py-1.5">
+        <div className="flex shrink-0 items-center justify-between gap-1">
+          <span className={`truncate text-[10px] ${pillClass}`}>{role}</span>
+          <div className="flex shrink-0 items-center gap-1">
+            {nodeData.isModified ? (
+              <span
+                className="h-2 w-2 shrink-0 rounded-full bg-live-sky"
+                title="Rule changed from original"
+                aria-label="Modified"
+              />
+            ) : null}
+            {nodeData.childFlowId ? (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-live-sky opacity-90" aria-hidden />
+            ) : null}
           </div>
         </div>
-        <div className="text-[13px] font-medium text-text-strong leading-tight">
+        <div className="mt-0.5 whitespace-normal break-words text-left text-[12px] font-medium leading-snug text-text-strong">
           {nodeData.label}
         </div>
-        {nodeData.childFlowId && selected && (
-          <div className="mt-2 pt-2 border-t border-accent-blue/30">
-            <div className="text-[10px] text-text-subtle">
-              Double-click or zoom deeply to reveal child flow
-            </div>
-          </div>
-        )}
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-accent-blue !w-3 !h-3" />
     </div>
   );
 }
@@ -124,366 +232,88 @@ const nodeTypes = {
   business: BusinessNode,
 };
 
-const mockRuleTree: RuleTreeNode = {
-  id: 'root',
-  name: 'Credit Decision Engine',
-  children: [
-    { id: 'applicant', name: 'Applicant Eligibility' },
-    {
-      id: 'risk',
-      name: 'Risk Assessment',
-      children: [
-        { id: 'credit-score', name: 'Credit Score Evaluation' },
-        { id: 'debt-ratio', name: 'Debt-to-Income Ratio' },
-        { id: 'fraud', name: 'Fraud Signal Check' },
-      ],
-    },
-    { id: 'pricing', name: 'Pricing & Offer Calculation' },
-    { id: 'routing', name: 'Final Decision Routing' },
-  ],
-};
-
-// Flow definitions
-const flowDefinitions: Record<string, { nodes: Node<FlowNodeData>[]; edges: Edge[] }> = {
-  root: {
-    nodes: [
-      {
-        id: 'n1',
-        type: 'business',
-        position: { x: 400, y: 50 },
-        data: { label: 'Application Received', type: 'start' },
-        draggable: false,
-      },
-      {
-        id: 'n2',
-        type: 'business',
-        position: { x: 400, y: 180 },
-        data: { label: 'Applicant Eligibility', type: 'action' },
-        draggable: false,
-      },
-      {
-        id: 'n3',
-        type: 'business',
-        position: { x: 400, y: 310 },
-        data: { label: 'Risk Assessment', type: 'domain', childFlowId: 'risk' },
-        draggable: false,
-      },
-      {
-        id: 'n4',
-        type: 'business',
-        position: { x: 400, y: 440 },
-        data: { label: 'Pricing & Offer Calculation', type: 'action' },
-        draggable: false,
-      },
-      {
-        id: 'n5',
-        type: 'business',
-        position: { x: 400, y: 570 },
-        data: { label: 'Final Decision Routing', type: 'decision' },
-        draggable: false,
-      },
-      {
-        id: 'n6',
-        type: 'business',
-        position: { x: 400, y: 700 },
-        data: { label: 'Decision Output', type: 'output' },
-        draggable: false,
-      },
-    ],
-    edges: [
-      {
-        id: 'e1-2',
-        source: 'n1',
-        target: 'n2',
-        type: 'smoothstep',
-        animated: true,
-        style: { stroke: '#0f62fe', strokeWidth: 3 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
-      },
-      {
-        id: 'e2-3',
-        source: 'n2',
-        target: 'n3',
-        type: 'smoothstep',
-        animated: true,
-        style: { stroke: '#0f62fe', strokeWidth: 3 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
-      },
-      {
-        id: 'e3-4',
-        source: 'n3',
-        target: 'n4',
-        type: 'smoothstep',
-        animated: true,
-        style: { stroke: '#0f62fe', strokeWidth: 3 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
-      },
-      {
-        id: 'e4-5',
-        source: 'n4',
-        target: 'n5',
-        type: 'smoothstep',
-        animated: true,
-        style: { stroke: '#0f62fe', strokeWidth: 3 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
-      },
-      {
-        id: 'e5-6',
-        source: 'n5',
-        target: 'n6',
-        type: 'smoothstep',
-        animated: true,
-        style: { stroke: '#0f62fe', strokeWidth: 3 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#0f62fe' },
-      },
-    ],
-  },
-  risk: {
-    nodes: [
-      {
-        id: 'r1',
-        type: 'business',
-        position: { x: 400, y: 50 },
-        data: { label: 'Start Risk Assessment', type: 'start' },
-      },
-      {
-        id: 'r2',
-        type: 'business',
-        position: { x: 400, y: 180 },
-        data: { label: 'Credit Score Evaluation', type: 'domain', childFlowId: 'credit-score' },
-      },
-      {
-        id: 'r3',
-        type: 'business',
-        position: { x: 400, y: 310 },
-        data: { label: 'Debt-to-Income Ratio Check', type: 'action' },
-      },
-      {
-        id: 'r4',
-        type: 'business',
-        position: { x: 400, y: 440 },
-        data: { label: 'Fraud Signal Check', type: 'action' },
-      },
-      {
-        id: 'r5',
-        type: 'business',
-        position: { x: 400, y: 570 },
-        data: { label: 'Risk Tier Assignment', type: 'action' },
-      },
-      {
-        id: 'r6',
-        type: 'business',
-        position: { x: 400, y: 700 },
-        data: { label: 'Manual Review Trigger?', type: 'decision' },
-      },
-      {
-        id: 'r7',
-        type: 'business',
-        position: { x: 200, y: 830 },
-        data: { label: 'Send to Manual Review', type: 'output' },
-      },
-      {
-        id: 'r8',
-        type: 'business',
-        position: { x: 600, y: 830 },
-        data: { label: 'Continue to Pricing', type: 'output' },
-      },
-    ],
-    edges: [
-      { id: 'er1-2', source: 'r1', target: 'r2', type: 'smoothstep', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
-      { id: 'er2-3', source: 'r2', target: 'r3', type: 'smoothstep', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
-      { id: 'er3-4', source: 'r3', target: 'r4', type: 'smoothstep', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
-      { id: 'er4-5', source: 'r4', target: 'r5', type: 'smoothstep', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
-      { id: 'er5-6', source: 'r5', target: 'r6', type: 'smoothstep', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
-      { id: 'er6-7', source: 'r6', target: 'r7', type: 'smoothstep', label: 'Yes', animated: true, style: { stroke: '#f1c21b', strokeWidth: 2 } },
-      { id: 'er6-8', source: 'r6', target: 'r8', type: 'smoothstep', label: 'No', animated: true, style: { stroke: '#24a148', strokeWidth: 2 } },
-    ],
-  },
-  'credit-score': {
-    nodes: [
-      {
-        id: 'c1',
-        type: 'business',
-        position: { x: 400, y: 50 },
-        data: { label: 'Read Credit Score', type: 'start' },
-      },
-      {
-        id: 'c2',
-        type: 'business',
-        position: { x: 400, y: 180 },
-        data: { label: 'Score Missing?', type: 'decision' },
-      },
-      {
-        id: 'c3',
-        type: 'business',
-        position: { x: 200, y: 310 },
-        data: { label: 'Manual Review', type: 'output' },
-      },
-      {
-        id: 'c4',
-        type: 'business',
-        position: { x: 600, y: 310 },
-        data: {
-          label: 'Score >= 700?',
-          type: 'decision',
-          isEditable: true,
-          ruleId: 'min-credit-score',
-          isModified: false,
-        },
-        draggable: false,
-      },
-      {
-        id: 'c5',
-        type: 'business',
-        position: { x: 400, y: 440 },
-        data: { label: 'High Risk Tier', type: 'output' },
-      },
-      {
-        id: 'c6',
-        type: 'business',
-        position: { x: 800, y: 440 },
-        data: { label: 'Score >= 760?', type: 'decision' },
-      },
-      {
-        id: 'c7',
-        type: 'business',
-        position: { x: 1000, y: 570 },
-        data: { label: 'Preferred Risk Tier', type: 'output' },
-      },
-      {
-        id: 'c8',
-        type: 'business',
-        position: { x: 600, y: 570 },
-        data: { label: 'Standard Risk Tier', type: 'output' },
-      },
-    ],
-    edges: [
-      { id: 'ec1-2', source: 'c1', target: 'c2', type: 'smoothstep', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
-      { id: 'ec2-3', source: 'c2', target: 'c3', type: 'smoothstep', label: 'Yes', animated: true, style: { stroke: '#da1e28', strokeWidth: 2 } },
-      { id: 'ec2-4', source: 'c2', target: 'c4', type: 'smoothstep', label: 'No', animated: true, style: { stroke: '#0f62fe', strokeWidth: 2 } },
-      { id: 'ec4-5', source: 'c4', target: 'c5', type: 'smoothstep', label: 'No', animated: true, style: { stroke: '#da1e28', strokeWidth: 2 } },
-      { id: 'ec4-6', source: 'c4', target: 'c6', type: 'smoothstep', label: 'Yes', animated: true, style: { stroke: '#24a148', strokeWidth: 2 } },
-      { id: 'ec6-7', source: 'c6', target: 'c7', type: 'smoothstep', label: 'Yes', animated: true, style: { stroke: '#24a148', strokeWidth: 2 } },
-      { id: 'ec6-8', source: 'c6', target: 'c8', type: 'smoothstep', label: 'No', animated: true, style: { stroke: '#f1c21b', strokeWidth: 2 } },
-    ],
-  },
-};
-
-const mockTests: TestResult[] = [
-  {
-    id: 't1',
-    status: 'PASS',
-    name: 'Approve applicant with score 760',
-    flowCovered: 'Credit Score Evaluation',
-    duration: '124ms',
-    executionPath: ['c1', 'c2', 'c4', 'c6', 'c7'],
-    expectedPath: ['c1', 'c2', 'c4', 'c6', 'c7'],
-    actualPath: ['c1', 'c2', 'c4', 'c6', 'c7'],
-  },
-  {
-    id: 't2',
-    status: 'PASS',
-    name: 'Approve applicant at threshold 680',
-    flowCovered: 'Credit Score Evaluation',
-    duration: '118ms',
-    executionPath: ['c1', 'c2', 'c4', 'c6', 'c8'],
-    expectedPath: ['c1', 'c2', 'c4', 'c6', 'c8'],
-    actualPath: ['c1', 'c2', 'c4', 'c6', 'c8'],
-  },
-  {
-    id: 't3',
-    status: 'FAIL',
-    name: 'Reject applicant with fraud flag',
-    flowCovered: 'Risk Assessment',
-    duration: '156ms',
-    executionPath: ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'],
-    expectedPath: ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r8'],
-    actualPath: ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'],
-    failureNode: 'r6',
-    failureReason: 'Expected to continue to pricing, but triggered manual review instead',
-  },
-  {
-    id: 't4',
-    status: 'WARN',
-    name: 'Pricing test needs rerun',
-    flowCovered: 'Pricing & Offer Calculation',
-    duration: '—',
-    executionPath: [],
-    expectedPath: [],
-    actualPath: [],
-  },
-];
-
-const editableRulesData: Record<string, EditableRule> = {
-  'min-credit-score': {
-    id: 'min-credit-score',
-    name: 'Minimum Credit Score',
-    parentFlow: 'Risk Assessment / Credit Score Evaluation',
-    businessMeaning: 'Applicant must meet the minimum credit score threshold.',
-    technicalExpression: 'creditScore >= 700',
-    threshold: 700,
-    originalThreshold: 700,
-    sourceFiles: [
-      'RiskScoringService.java:42',
-      'credit-rules.xml:18',
-      'RiskScoringServiceTest.java:73',
-    ],
-    impactedFlows: [
-      'Credit Score Evaluation modified',
-      'Risk Tier Assignment impacted',
-      'Final Decision Routing impacted',
-    ],
-    testsNeedRerun: 4,
-  },
-};
+const flowDefinitions = EDITOR_LOAN_APPROVALS_FLOW_DEFINITIONS;
 
 function EditorPageInner() {
+  const navigate = useNavigate();
+  const { unlockTo } = useWorkflow();
+  const [projectName, setProjectName] = useState(() => projectDisplayName(readProjectSession()));
   const [currentFlowId, setCurrentFlowId] = useState<string>('root');
-  const [breadcrumb, setBreadcrumb] = useState<Array<{ id: string; name: string }>>([
-    { id: 'root', name: 'Credit Decision Engine' },
+  const [breadcrumb, setBreadcrumb] = useState<Array<{ id: string; name: string }>>(() => [
+    { id: 'root', name: projectDisplayName(readProjectSession()) },
   ]);
+
+  const ruleTree = useMemo<AnalysisLogicNode>(
+    () => ({ ...LOAN_APPROVALS_HIERARCHY_BASE, name: projectName }),
+    [projectName],
+  );
   
   const currentFlow = flowDefinitions[currentFlowId] || flowDefinitions.root;
   const [nodes, setNodes, onNodesChange] = useNodesState(currentFlow.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(currentFlow.edges);
   const [selectedTreeId, setSelectedTreeId] = useState<string | null>('root');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
-  const [activeTestTab, setActiveTestTab] = useState<string>('all');
+  const [isEditorMaximized, setIsEditorMaximized] = useState(false);
   const [expandedTreeIds, setExpandedTreeIds] = useState<Set<string>>(
-    new Set(['root', 'risk'])
+    () => new Set(LOAN_APPROVALS_DEFAULT_EXPANDED),
   );
   const [isTransitioning, setIsTransitioning] = useState(false);
   const semanticZoomTriggeredRef = useRef(false);
   
-  // Rule editing state
-  const [editableRules, setEditableRules] = useState<Record<string, EditableRule>>(editableRulesData);
+  // Rule editing state — eight keys aligned with Analysis `editableRules` (6 + 1 + 1)
+  const [editableRules, setEditableRules] = useState<Record<string, EditableRule>>(() =>
+    buildEditorEditableRulesInitial(),
+  );
+  const editableRulesRef = useRef(editableRules);
+  editableRulesRef.current = editableRules;
   const [successMessage, setSuccessMessage] = useState<string>('');
-
-  // Test path highlighting state
-  const [highlightedPath, setHighlightedPath] = useState<string[]>([]);
-  const [isPlayingTest, setIsPlayingTest] = useState(false);
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [loanRuleAppliedForDemo, setLoanRuleAppliedForDemo] = useState(false);
 
   const { fitView } = useReactFlow();
   const { zoom } = useViewport();
 
   const SEMANTIC_ZOOM_THRESHOLD = 1.65;
 
-  // Update nodes/edges when flow changes
+  useEffect(() => {
+    const resetEditorForNewProject = () => {
+      const name = projectDisplayName(readProjectSession());
+      setProjectName(name);
+      setCurrentFlowId('root');
+      setBreadcrumb([{ id: 'root', name }]);
+      setSelectedTreeId('root');
+      setSelectedNodeId(null);
+      setExpandedTreeIds(new Set(LOAN_APPROVALS_DEFAULT_EXPANDED));
+      setEditableRules(buildEditorEditableRulesInitial());
+      setLoanRuleAppliedForDemo(false);
+      setSuccessMessage('');
+    };
+    window.addEventListener(BLTM_PROJECT_CHANGED, resetEditorForNewProject);
+    return () => window.removeEventListener(BLTM_PROJECT_CHANGED, resetEditorForNewProject);
+  }, []);
+
+  // Update nodes/edges when flow changes (merge rule labels from ref so keys match graph `ruleId`s)
   useEffect(() => {
     const flow = flowDefinitions[currentFlowId] || flowDefinitions.root;
-    setNodes(flow.nodes);
+    setNodes(mergeEditableRuleLabels(flow.nodes, editableRulesRef.current));
     setEdges(flow.edges);
     setIsTransitioning(true);
     setTimeout(() => {
-      fitView({ padding: 0.2, duration: 300 });
+      fitView({ padding: 0.28, duration: 300 });
       setTimeout(() => {
         setIsTransitioning(false);
         semanticZoomTriggeredRef.current = false;
       }, 350);
     }, 50);
   }, [currentFlowId, setNodes, setEdges, fitView]);
+
+  // Live-update labels when thresholds change (without re-running fitView)
+  useEffect(() => {
+    setNodes((nds) => mergeEditableRuleLabels(nds, editableRules));
+  }, [editableRules, setNodes]);
+
+  useEffect(() => {
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === selectedNodeId })));
+  }, [selectedNodeId, setNodes]);
 
   // Semantic zoom behavior
   useEffect(() => {
@@ -511,6 +341,32 @@ function EditorPageInner() {
     semanticZoomTriggeredRef.current = false;
   }, [selectedNodeId]);
 
+  useEffect(() => {
+    if (!isEditorMaximized) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isEditorMaximized]);
+
+  useEffect(() => {
+    if (!isEditorMaximized) return;
+    const id = window.setTimeout(() => {
+      fitView({ padding: 0.18, duration: 250 });
+    }, 80);
+    return () => window.clearTimeout(id);
+  }, [isEditorMaximized, fitView]);
+
+  useEffect(() => {
+    if (!isEditorMaximized) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsEditorMaximized(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isEditorMaximized]);
+
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
@@ -526,18 +382,23 @@ function EditorPageInner() {
     setExpandedTreeIds(newExpanded);
   };
 
-  const navigateToFlow = (flowId: string, flowName: string) => {
-    if (flowDefinitions[flowId]) {
-      setCurrentFlowId(flowId);
-      const newBreadcrumb = [...breadcrumb];
-      const existingIndex = newBreadcrumb.findIndex((b) => b.id === flowId);
-      if (existingIndex >= 0) {
-        newBreadcrumb.splice(existingIndex + 1);
-      } else {
-        newBreadcrumb.push({ id: flowId, name: flowName });
-      }
-      setBreadcrumb(newBreadcrumb);
+  const navigateToFlow = (flowId: string, flowName: string, selectNodeId?: string | null) => {
+    if (!flowDefinitions[flowId]) return;
+    setCurrentFlowId(flowId);
+    const newBreadcrumb = [...breadcrumb];
+    const existingIndex = newBreadcrumb.findIndex((b) => b.id === flowId);
+    if (existingIndex >= 0) {
+      newBreadcrumb.splice(existingIndex + 1);
+    } else {
+      newBreadcrumb.push({ id: flowId, name: flowName });
+    }
+    setBreadcrumb(newBreadcrumb);
+    if (selectNodeId) {
+      setSelectedNodeId(selectNodeId);
+      setSelectedTreeId(selectNodeId);
+    } else {
       setSelectedNodeId(null);
+      setSelectedTreeId(flowId === 'root' ? 'root' : flowId);
     }
   };
 
@@ -547,7 +408,7 @@ function EditorPageInner() {
       [ruleId]: {
         ...prev[ruleId],
         threshold: newThreshold,
-        technicalExpression: `creditScore >= ${newThreshold}`,
+        technicalExpression: technicalExpressionFor(ruleId, newThreshold),
       },
     }));
   };
@@ -556,28 +417,12 @@ function EditorPageInner() {
     const rule = editableRules[ruleId];
     if (!rule) return;
 
-    // Update node label and mark as modified
-    setNodes((nds) =>
-      nds.map((node) => {
-        const nodeData = node.data as FlowNodeData;
-        if (nodeData.ruleId === ruleId) {
-          return {
-            ...node,
-            data: {
-              ...nodeData,
-              label: `Score >= ${rule.threshold}?`,
-              isModified: true,
-            },
-          };
-        }
-        return node;
-      })
-    );
-
-    // Show success message
     setSuccessMessage(
-      `Rule updated: creditScore >= ${rule.originalThreshold} → creditScore >= ${rule.threshold}`
+      `${rule.name}: threshold ${rule.originalThreshold} → ${rule.threshold} (${rule.technicalExpression})`,
     );
+    if (ruleId === 'gate-dti') {
+      setLoanRuleAppliedForDemo(true);
+    }
     setTimeout(() => setSuccessMessage(''), 5000);
   };
 
@@ -585,57 +430,46 @@ function EditorPageInner() {
     const rule = editableRules[ruleId];
     if (!rule) return;
 
-    // Reset rule to original
+    const orig = rule.originalThreshold;
     setEditableRules((prev) => ({
       ...prev,
       [ruleId]: {
         ...prev[ruleId],
-        threshold: prev[ruleId].originalThreshold,
-        technicalExpression: `creditScore >= ${prev[ruleId].originalThreshold}`,
+        threshold: orig,
+        technicalExpression: technicalExpressionFor(ruleId, orig),
       },
     }));
 
-    // Update node label and remove modified flag
-    setNodes((nds) =>
-      nds.map((node) => {
-        const nodeData = node.data as FlowNodeData;
-        if (nodeData.ruleId === ruleId) {
-          return {
-            ...node,
-            data: {
-              ...nodeData,
-              label: `Score >= ${rule.originalThreshold}?`,
-              isModified: false,
-            },
-          };
-        }
-        return node;
-      })
-    );
-
     setSuccessMessage('');
-  };
-
-  const handleTreeClick = (node: RuleTreeNode) => {
-    setSelectedTreeId(node.id);
-    setSelectedNodeId(null);
-
-    // Navigate to flow if it exists
-    if (flowDefinitions[node.id]) {
-      navigateToFlow(node.id, node.name);
-    } else {
-      // Focus on node in current flow
-      const graphNode = nodes.find((n) => {
-        const nodeData = n.data as FlowNodeData;
-        return nodeData.label.toLowerCase().includes(node.name.toLowerCase());
-      });
-      if (graphNode) {
-        setSelectedNodeId(graphNode.id);
-      }
+    if (ruleId === 'gate-dti') {
+      setLoanRuleAppliedForDemo(false);
     }
   };
 
-  const renderTreeNode = (node: RuleTreeNode, depth: number = 0): JSX.Element => {
+  const handleTreeClick = (node: AnalysisLogicNode) => {
+    setSelectedTreeId(node.id);
+
+    if (flowDefinitions[node.id]) {
+      navigateToFlow(node.id, node.name);
+      return;
+    }
+
+    const parentDomain = LOAN_APPROVALS_LEAF_TO_DOMAIN[node.id];
+    if (parentDomain && flowDefinitions[parentDomain]) {
+      const parentName = LOAN_APPROVALS_DOMAIN_DETAILS[parentDomain]?.name ?? parentDomain;
+      if (currentFlowId !== parentDomain) {
+        navigateToFlow(parentDomain, parentName, node.id);
+      } else {
+        setSelectedNodeId(node.id);
+        setSelectedTreeId(node.id);
+      }
+      return;
+    }
+
+    setSelectedNodeId(null);
+  };
+
+  const renderTreeNode = (node: AnalysisLogicNode, depth: number = 0): JSX.Element => {
     const hasChildren = node.children && node.children.length > 0;
     const isExpanded = expandedTreeIds.has(node.id);
     const isSelected = selectedTreeId === node.id;
@@ -679,133 +513,231 @@ function EditorPageInner() {
     );
   };
 
-  const getSelectedInfo = () => {
+  const getInspectorPanel = (): EditorInspectorPanel | null => {
+    const findTreeNode = (tree: AnalysisLogicNode, id: string): AnalysisLogicNode | null => {
+      if (tree.id === id) return tree;
+      for (const c of tree.children ?? []) {
+        const f = findTreeNode(c, id);
+        if (f) return f;
+      }
+      return null;
+    };
+
     if (selectedNodeId) {
       const node = nodes.find((n) => n.id === selectedNodeId);
-      if (node) {
-        const nodeData = node.data as FlowNodeData;
+      if (!node) return null;
+      const nodeData = node.data as FlowNodeData;
+      const isEditableHere = Boolean(nodeData.isEditable && nodeData.ruleId);
+
+      if (currentFlowId === 'hard-decline' && selectedNodeId.startsWith('hd-fail-')) {
+        const leafId = selectedNodeId.replace(/^hd-fail-/, '');
+        const pd = LOAN_APPROVALS_DOMAIN_DETAILS['hard-decline'];
+        const meaning =
+          (EDITOR_LEAF_BUSINESS_MEANING[leafId] ?? '') +
+          ' On the graph, the red “No” edge from this check leads here: the batch records a hard decline for this reason.';
         return {
+          mode: 'step',
           name: nodeData.label,
-          flow: breadcrumb[breadcrumb.length - 1].name,
-          type: nodeData.type,
-          description: nodeData.description || 'Business logic node in the decision flow.',
-          childFlowId: nodeData.childFlowId,
-          sourceFiles: ['CreditService.java', 'business-rules.xml'],
-          status: 'Active',
+          parentName: pd?.name ?? 'Hard prescreen rules',
+          flow: projectName,
+          typeLabel: 'Outcome',
+          businessMeaning: meaning.trim() || 'Decline path for this prescreen gate.',
         };
       }
-    }
-    if (selectedTreeId && selectedTreeId !== 'root') {
-      const findNode = (tree: RuleTreeNode): RuleTreeNode | null => {
-        if (tree.id === selectedTreeId) return tree;
-        if (tree.children) {
-          for (const child of tree.children) {
-            const found = findNode(child);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-      const treeNode = findNode(mockRuleTree);
-      if (treeNode) {
+
+      if (selectedNodeId === 'hard-prescreen-pass') {
+        const pd = LOAN_APPROVALS_DOMAIN_DETAILS['hard-decline'];
         return {
+          mode: 'step',
+          name: nodeData.label,
+          parentName: pd?.name ?? 'Hard prescreen rules',
+          flow: projectName,
+          typeLabel: 'Outcome',
+          businessMeaning:
+            'Every prescreen gate answered Yes in order, so the sample program continues to down payment, risk grade, and final decision (see LNRULES after `3000-HARD-DECLINE-RULES`).',
+        };
+      }
+
+      if (currentFlowId === 'root' && LOAN_APPROVALS_DOMAIN_DETAILS[selectedNodeId]) {
+        const d = LOAN_APPROVALS_DOMAIN_DETAILS[selectedNodeId];
+        return {
+          mode: 'domain',
+          name: d.name,
+          flow: projectName,
+          typeLabel: 'Logic domain',
+          description:
+            EDITOR_DOMAIN_DESCRIPTION[selectedNodeId] ??
+            'Part of the loan-approval batch in the sample legacy project.',
+        };
+      }
+
+      if (currentFlowId !== 'root' && !isEditableHere) {
+        const pd = LOAN_APPROVALS_DOMAIN_DETAILS[currentFlowId];
+        const parentName = pd?.name ?? currentFlowId;
+        const meaning =
+          EDITOR_LEAF_BUSINESS_MEANING[selectedNodeId] ??
+          'Standard step in this area of the policy path for the sample program.';
+        return {
+          mode: 'step',
+          name: nodeData.label,
+          parentName,
+          flow: projectName,
+          typeLabel: nodeRoleLabel(nodeData.type),
+          businessMeaning: meaning,
+        };
+      }
+
+      return null;
+    }
+
+    if (selectedTreeId && selectedTreeId !== 'root') {
+      const domainD = LOAN_APPROVALS_DOMAIN_DETAILS[selectedTreeId];
+      if (domainD) {
+        return {
+          mode: 'domain',
+          name: domainD.name,
+          flow: projectName,
+          typeLabel: 'Logic domain',
+          description:
+            EDITOR_DOMAIN_DESCRIPTION[selectedTreeId] ??
+            'Part of the loan-approval batch in the sample legacy project.',
+        };
+      }
+
+      const leafParent = LOAN_APPROVALS_LEAF_TO_DOMAIN[selectedTreeId];
+      const treeNode = findTreeNode(ruleTree, selectedTreeId);
+      if (treeNode && leafParent) {
+        const pd = LOAN_APPROVALS_DOMAIN_DETAILS[leafParent];
+        return {
+          mode: 'step',
           name: treeNode.name,
-          flow: breadcrumb[breadcrumb.length - 1].name,
-          type: 'domain',
-          description: 'Business logic domain containing multiple decision rules.',
-          childFlowId: flowDefinitions[treeNode.id] ? treeNode.id : undefined,
-          sourceFiles: ['RuleService.java', 'domain-rules.xml'],
-          status: 'Mapped',
+          parentName: pd?.name ?? leafParent,
+          flow: projectName,
+          typeLabel: 'Business step',
+          businessMeaning:
+            EDITOR_LEAF_BUSINESS_MEANING[selectedTreeId] ??
+            'Standard step in this area of the policy path for the sample program.',
         };
       }
     }
     return null;
   };
 
-  const selectedInfo = getSelectedInfo();
+  const inspectorPanel = getInspectorPanel();
+
+  const cardShellClass = isEditorMaximized
+    ? 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border-0 bg-panel-bg shadow-none'
+    : 'flex min-h-[720px] h-[min(96dvh,calc(100dvh-12rem))] max-h-[calc(100dvh-7rem)] flex-col overflow-hidden rounded-xl border border-border bg-panel-bg shadow-sm';
 
   return (
-    <div className="h-screen flex flex-col bg-panel-bg">
-      {/* Top Toolbar */}
-      <div className="bg-panel-bg-secondary border-b border-border px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-text-strong">
-            {breadcrumb.map((crumb, index) => (
-              <div key={crumb.id} className="flex items-center gap-2">
-                {index > 0 && <span className="text-text-subtle">/</span>}
+    <div
+      className={
+        isEditorMaximized
+          ? 'fixed inset-0 z-[1000] flex min-h-0 flex-col bg-app-bg'
+          : 'flex flex-col gap-6'
+      }
+    >
+      {!isEditorMaximized && (
+        <PageHeader
+          title="Visual business logic editor"
+          tagline={`${projectName}—same logic hierarchy as Analysis (LNMAIN, LNRULES, LNRATE); tune the eight policy thresholds, then Modernize.`}
+          Icon={Workflow}
+        />
+      )}
+      <div className={cardShellClass}>
+        <div className="shrink-0 border-b border-border bg-panel-bg-secondary">
+          {isEditorMaximized ? (
+            <h1 className="px-4 pt-4 pb-1 text-2xl font-bold tracking-tight text-text-strong sm:text-3xl">
+              Visual business logic editor
+            </h1>
+          ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+            <div
+              className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-text-strong"
+              aria-label="Location in hierarchy"
+            >
+              {breadcrumb.map((crumb, index) => (
+                <div key={crumb.id} className="flex items-center gap-2">
+                  {index > 0 && <span className="text-text-subtle">/</span>}
+                  <button
+                    type="button"
+                    className={`font-medium transition-colors hover:text-accent-blue ${
+                      index === breadcrumb.length - 1 ? 'text-accent-blue' : ''
+                    }`}
+                    onClick={() => {
+                      if (index < breadcrumb.length - 1) {
+                        navigateToFlow(crumb.id, crumb.name);
+                      }
+                    }}
+                  >
+                    {crumb.name}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {isEditorMaximized ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn-primary px-3 py-1.5 text-sm"
+                    onClick={() => {
+                      unlockTo(4);
+                      navigate('/modernization');
+                    }}
+                    title="Open modernization workspace"
+                  >
+                    Modernize
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary inline-flex items-center gap-2 px-3 py-1.5 text-sm"
+                    onClick={() => setIsEditorMaximized(false)}
+                    title="Exit fullscreen"
+                  >
+                    <Minimize2 className="h-4 w-4 shrink-0" aria-hidden />
+                    Return
+                  </button>
+                </>
+              ) : (
                 <button
-                  className={`font-medium hover:text-accent-blue transition-colors ${
-                    index === breadcrumb.length - 1 ? 'text-accent-blue' : ''
-                  }`}
-                  onClick={() => {
-                    if (index < breadcrumb.length - 1) {
-                      navigateToFlow(crumb.id, crumb.name);
-                    }
-                  }}
+                  type="button"
+                  className="btn-secondary inline-flex items-center justify-center p-2"
+                  onClick={() => setIsEditorMaximized(true)}
+                  title="Maximize editor"
+                  aria-label="Maximize editor"
                 >
-                  {crumb.name}
+                  <Maximize2 className="h-4 w-4" />
                 </button>
-              </div>
-            ))}
+              )}
+            </div>
           </div>
-          <div className="flex gap-2">
-            {breadcrumb.length > 1 && (
+          {!isEditorMaximized && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-border/60 px-4 py-3">
               <button
-                className="btn-secondary text-sm px-3 py-1"
+                type="button"
+                className="btn-primary px-3 py-1 text-sm"
                 onClick={() => {
-                  const parent = breadcrumb[breadcrumb.length - 2];
-                  navigateToFlow(parent.id, parent.name);
+                  unlockTo(4);
+                  navigate('/modernization');
                 }}
+                title="Open modernization workspace"
               >
-                Back
+                Modernize
               </button>
-            )}
-            <button
-              className="btn-secondary text-sm px-3 py-1 font-semibold"
-              onClick={() => {
-                const reactFlow = useReactFlow();
-                reactFlow.zoomIn({ duration: 300 });
-              }}
-              title="Zoom In"
-            >
-              Zoom In
-            </button>
-            <button
-              className="btn-secondary text-sm px-3 py-1 font-semibold"
-              onClick={() => {
-                const reactFlow = useReactFlow();
-                reactFlow.zoomOut({ duration: 300 });
-              }}
-              title="Zoom Out"
-            >
-              Zoom Out
-            </button>
-            <button
-              className="btn-secondary text-sm px-3 py-1 font-semibold"
-              onClick={() => fitView({ padding: 0.2, duration: 300 })}
-              title="Fit View"
-            >
-              Fit View
-            </button>
-          </div>
+            </div>
+          )}
         </div>
-        <div className="flex gap-2">
-          <button className="btn-secondary text-sm px-3 py-1">Run Tests</button>
-          <a href="/report" className="btn-primary text-sm px-3 py-1">
-            Generate Report
-          </a>
-        </div>
-      </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Left Pane: Rule Tree */}
-        <div className="w-64 bg-panel-bg-secondary border-r border-border overflow-y-auto">
+        <div className="w-64 overflow-y-auto border-r border-border bg-panel-bg-secondary custom-scrollbar">
           <div className="p-3">
             <h3 className="text-sm font-semibold text-text-strong mb-2">
-              Rule Hierarchy
+              Business logic hierarchy
             </h3>
-            <div className="space-y-0.5">{renderTreeNode(mockRuleTree)}</div>
+            <div className="space-y-0.5">{renderTreeNode(ruleTree)}</div>
           </div>
         </div>
 
@@ -814,12 +746,13 @@ function EditorPageInner() {
           <ReactFlow
             nodes={nodes}
             edges={edges}
+            defaultEdgeOptions={{ labelShowBg: false }}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={(_, node) => {
               setSelectedNodeId(node.id);
-              setSelectedTreeId(null);
+              setSelectedTreeId(node.id);
             }}
             onNodeDoubleClick={(_, node) => {
               const nodeData = node.data as FlowNodeData;
@@ -834,8 +767,8 @@ function EditorPageInner() {
             elementsSelectable={true}
             fitView
             className="bg-panel-bg"
+            proOptions={{ hideAttribution: true }}
           >
-            <Controls className="bg-panel-bg-secondary border border-border" />
             <Background className="bg-panel-bg" />
             <MiniMap
               className="bg-panel-bg-secondary border border-border"
@@ -845,7 +778,7 @@ function EditorPageInner() {
         </div>
 
         {/* Right Pane: Inspector / Rule Editor */}
-        <div className="w-80 bg-panel-bg-secondary border-l border-border overflow-y-auto">
+        <div className="w-80 overflow-y-auto border-l border-border bg-panel-bg-secondary custom-scrollbar">
           <div className="p-4">
             {(() => {
               // Check if selected node is editable
@@ -855,104 +788,60 @@ function EditorPageInner() {
               const rule = isEditableNode ? editableRules[nodeData.ruleId!] : null;
 
               if (isEditableNode && rule) {
-                // Show Business Rule Editor
                 return (
                   <>
-                    <h3 className="text-sm font-semibold text-text-strong mb-3">
-                      Business Rule Editor
-                    </h3>
+                    <h3 className="text-sm font-semibold text-text-strong mb-3">Rule</h3>
+                    <div className="mb-3 rounded-md border border-accent-blue/30 bg-accent-blue/10 px-3 py-2 text-xs text-accent-blue">
+                      This rule is the <span className="font-semibold">highlighted</span> node in the graph
+                      {selectedNodeId ? ` (“${nodeData?.label ?? selectedNodeId}”).` : '.'}
+                    </div>
                     <div className="space-y-4">
                       <div>
-                        <div className="text-xs text-text-subtle mb-1">Rule Name</div>
-                        <div className="text-sm font-semibold text-text-strong">
-                          {rule.name}
-                        </div>
+                        <div className="text-xs text-text-subtle mb-1">Name</div>
+                        <div className="text-sm font-semibold text-text-strong">{rule.name}</div>
                       </div>
 
                       <div>
-                        <div className="text-xs text-text-subtle mb-1">Parent Flow</div>
-                        <div className="text-xs text-text-muted">
-                          {rule.parentFlow}
-                        </div>
+                        <div className="text-xs text-text-subtle mb-1">Parent</div>
+                        <div className="text-sm text-text-muted">{rule.parentFlow}</div>
                       </div>
 
                       <div>
-                        <div className="text-xs text-text-subtle mb-1">Business Meaning</div>
-                        <div className="text-xs text-text-muted">
-                          {rule.businessMeaning}
-                        </div>
+                        <div className="text-xs text-text-subtle mb-1">Business meaning</div>
+                        <div className="text-sm leading-relaxed text-text-muted">{rule.businessMeaning}</div>
                       </div>
 
                       <div>
-                        <div className="text-xs text-text-subtle mb-1">Technical Expression</div>
+                        <div className="text-xs text-text-subtle mb-1">Technical expression</div>
                         <div className="text-xs font-mono bg-panel-bg px-2 py-1.5 rounded text-accent-blue">
                           {rule.technicalExpression}
                         </div>
                       </div>
 
                       <div>
-                        <label className="text-xs text-text-subtle mb-1 block">
-                          Editable Threshold
-                        </label>
+                        <label className="text-xs text-text-subtle mb-1 block">{thresholdFieldLabel(rule.id)}</label>
                         <input
                           type="number"
                           value={rule.threshold}
-                          onChange={(e) => updateRuleThreshold(rule.id, parseInt(e.target.value) || 0)}
+                          onChange={(e) => updateRuleThreshold(rule.id, parseInt(e.target.value, 10) || 0)}
                           className="w-full px-3 py-2 bg-panel-bg border border-border rounded text-sm text-text-strong focus:outline-none focus:border-accent-blue"
                         />
                       </div>
 
-                      <div>
-                        <div className="text-xs text-text-subtle mb-2">Source Locations</div>
-                        <div className="space-y-1">
-                          {rule.sourceFiles.map((file) => (
-                            <div
-                              key={file}
-                              className="text-xs text-text-strong bg-panel-bg px-2 py-1 rounded font-mono"
-                            >
-                              {file}
-                            </div>
-                          ))}
+                      {loanRuleAppliedForDemo && rule.id === 'gate-dti' && rule.threshold === 45 && (
+                        <div className="rounded-lg border border-live-sky/35 bg-live-sky/10 p-3 text-xs text-text-strong">
+                          Max DTI is at demo value <strong>45%</strong>. Exit fullscreen if needed, then use{' '}
+                          <strong>Modernize</strong> below the breadcrumb to continue.
                         </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs text-text-subtle mb-2">Impact Preview</div>
-                        <div className="space-y-1">
-                          {rule.impactedFlows.map((flow, idx) => (
-                            <div key={idx} className="text-xs text-text-muted">
-                              • {flow}
-                            </div>
-                          ))}
-                          <div className="text-xs text-warning-yellow font-medium mt-2">
-                            {rule.testsNeedRerun} tests need rerun
-                          </div>
-                        </div>
-                      </div>
+                      )}
 
                       <div className="space-y-2 pt-2">
-                        <button
-                          className="w-full btn-secondary text-sm py-2"
-                          onClick={() => {
-                            alert('Preview Impact: Would show detailed impact analysis');
-                          }}
-                        >
-                          Preview Impact
-                        </button>
-                        <button
-                          className="w-full btn-secondary text-sm py-2"
-                          onClick={() => {
-                            alert('Run Impacted Tests: Would execute affected test cases');
-                          }}
-                        >
-                          Run Impacted Tests
-                        </button>
                         <button
                           className="w-full btn-primary text-sm py-2"
                           onClick={() => applyRuleChange(rule.id)}
                           disabled={rule.threshold === rule.originalThreshold}
                         >
-                          Apply Change
+                          Apply change
                         </button>
                         <button
                           className="w-full btn-secondary text-sm py-2"
@@ -963,144 +852,86 @@ function EditorPageInner() {
                         </button>
                       </div>
 
-                      {successMessage && (
+                      {successMessage ? (
                         <div className="p-3 bg-success-green/20 border border-success-green rounded">
-                          <div className="text-xs text-success-green font-medium">
-                            ✓ {successMessage}
-                          </div>
+                          <div className="text-xs text-success-green font-medium">✓ {successMessage}</div>
                         </div>
-                      )}
-                    </div>
-                  </>
-                );
-              } else if (selectedInfo) {
-                // Show normal inspector
-                return (
-                  <>
-                    <h3 className="text-sm font-semibold text-text-strong mb-3">
-                      Inspector
-                    </h3>
-                    <div className="space-y-3">
-                      <div>
-                        <div className="text-xs text-text-subtle mb-1">Name</div>
-                        <div className="text-sm font-medium text-text-strong">
-                          {selectedInfo.name}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-text-subtle mb-1">Flow</div>
-                        <div className="text-sm text-text-strong">
-                          {selectedInfo.flow}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-text-subtle mb-1">Type</div>
-                        <div className="text-sm text-text-strong uppercase">
-                          {selectedInfo.type}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-text-subtle mb-1">Description</div>
-                        <div className="text-sm text-text-muted">
-                          {selectedInfo.description}
-                        </div>
-                      </div>
-                      {selectedInfo.childFlowId && (
-                        <div className="p-2 bg-accent-blue/10 border border-accent-blue rounded">
-                          <div className="text-xs text-accent-blue font-medium">
-                            💡 Double-click node to open child flow
-                          </div>
-                        </div>
-                      )}
-                      <div>
-                        <div className="text-xs text-text-subtle mb-1">Status</div>
-                        <span className="inline-block px-2 py-0.5 text-xs font-medium bg-success-green/20 text-success-green rounded">
-                          {selectedInfo.status}
-                        </span>
-                      </div>
-                      <div>
-                        <div className="text-xs text-text-subtle mb-2">
-                          Source Files
-                        </div>
-                        <div className="space-y-1">
-                          {selectedInfo.sourceFiles.map((file) => (
-                            <div
-                              key={file}
-                              className="text-xs text-text-strong bg-panel-bg px-2 py-1 rounded font-mono"
-                            >
-                              {file}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                );
-              } else {
-                return (
-                  <>
-                    <h3 className="text-sm font-semibold text-text-strong mb-3">
-                      Inspector
-                    </h3>
-                    <div className="text-sm text-text-muted">
-                      Select a node to inspect business logic.
+                      ) : null}
                     </div>
                   </>
                 );
               }
+
+              if (inspectorPanel?.mode === 'domain') {
+                return (
+                  <>
+                    <h3 className="text-sm font-semibold text-text-strong mb-3">Inspector</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Name</div>
+                        <div className="text-sm font-medium text-text-strong">{inspectorPanel.name}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Flow</div>
+                        <div className="text-sm text-text-strong">{inspectorPanel.flow}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Type</div>
+                        <div className="text-sm text-text-strong">{inspectorPanel.typeLabel}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Description</div>
+                        <div className="text-sm leading-relaxed text-text-muted">{inspectorPanel.description}</div>
+                      </div>
+                    </div>
+                  </>
+                );
+              }
+
+              if (inspectorPanel?.mode === 'step') {
+                return (
+                  <>
+                    <h3 className="text-sm font-semibold text-text-strong mb-3">Inspector</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Name</div>
+                        <div className="text-sm font-medium text-text-strong">{inspectorPanel.name}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Parent</div>
+                        <div className="text-sm text-text-muted">{inspectorPanel.parentName}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Flow</div>
+                        <div className="text-sm text-text-strong">{inspectorPanel.flow}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Type</div>
+                        <div className="text-sm text-text-strong">{inspectorPanel.typeLabel}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-text-subtle mb-1">Business meaning</div>
+                        <div className="text-sm leading-relaxed text-text-muted">
+                          {inspectorPanel.businessMeaning}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              }
+
+              return (
+                <>
+                  <h3 className="text-sm font-semibold text-text-strong mb-3">Inspector</h3>
+                  <div className="text-sm text-text-muted">
+                    Select a domain or step in the hierarchy or on the graph.
+                  </div>
+                </>
+              );
             })()}
           </div>
         </div>
       </div>
-
-      {/* Bottom: Test Runner */}
-      <div className="h-48 bg-panel-bg-secondary border-t border-border flex flex-col">
-        <div className="flex items-center gap-4 px-4 py-2 border-b border-border">
-          {['all', 'impacted', 'failed', 'regression'].map((tab) => (
-            <button
-              key={tab}
-              className={`text-sm px-3 py-1 rounded transition-colors ${
-                activeTestTab === tab
-                  ? 'bg-accent-blue text-white'
-                  : 'text-text-muted hover:text-text-strong'
-              }`}
-              onClick={() => setActiveTestTab(tab)}
-            >
-              {tab === 'all' && 'All Tests'}
-              {tab === 'impacted' && 'Impacted Tests'}
-              {tab === 'failed' && 'Failed Tests'}
-              {tab === 'regression' && 'Regression Tests'}
-            </button>
-          ))}
-        </div>
-        <div className="flex-1 overflow-y-auto px-4 py-2 custom-scrollbar">
-          <div className="space-y-1">
-            {mockTests.map((test) => (
-              <div
-                key={test.id}
-                className={`flex items-center gap-3 px-3 py-2 rounded cursor-pointer transition-colors ${
-                  selectedTestId === test.id
-                    ? 'bg-accent-blue/20 border border-accent-blue'
-                    : 'hover:bg-panel-bg'
-                }`}
-                onClick={() => setSelectedTestId(test.id)}
-              >
-                <span
-                  className={`text-xs font-bold ${
-                    test.status === 'PASS'
-                      ? 'text-success-green'
-                      : test.status === 'FAIL'
-                      ? 'text-error-red'
-                      : 'text-warning-yellow'
-                  }`}
-                >
-                  {test.status}
-                </span>
-                <span className="text-sm text-text-strong">{test.name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );

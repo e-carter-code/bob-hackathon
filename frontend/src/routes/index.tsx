@@ -5,6 +5,7 @@ import UploadPage from '../pages/UploadPage';
 import AnalysisPage from '../pages/AnalysisPage';
 import EditorPage from '../pages/EditorPage';
 import ReportPage from '../pages/ReportPage';
+import ModernizationPage from '../pages/ModernizationPage';
 
 export const router = createBrowserRouter([
   {
@@ -30,6 +31,10 @@ export const router = createBrowserRouter([
       {
         path: 'report',
         element: <ReportPage />,
+      },
+      {
+        path: 'modernization',
+        element: <ModernizationPage />,
       },
     ],
   },
