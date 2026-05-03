@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes import router as api_v1_router
+
 app = FastAPI(
     title="Legacy Logic Studio API",
     description="Backend API for Legacy Logic Studio - Business Logic Time Machine",
@@ -21,6 +23,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(api_v1_router, prefix="/api/v1")
+
 
 @app.get("/health")
 async def health_check():
@@ -34,7 +38,8 @@ async def root():
     return {
         "message": "Legacy Logic Studio API",
         "version": "0.1.0",
-        "docs": "/docs"
+        "docs": "/docs",
+        "api_v1": "/api/v1",
     }
 
 # Made with Bob
