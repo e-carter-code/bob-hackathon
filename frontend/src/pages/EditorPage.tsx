@@ -8,6 +8,7 @@ import {
   projectDisplayName,
   readProjectSession,
 } from '../workflow/projectSession';
+import { writeEditorRuleSnapshot } from '../workflow/editorRuleSnapshot';
 import {
   LOAN_APPROVALS_DEFAULT_EXPANDED,
   LOAN_APPROVALS_DOMAIN_DETAILS,
@@ -268,6 +269,10 @@ function EditorPageInner() {
   editableRulesRef.current = editableRules;
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [loanRuleAppliedForDemo, setLoanRuleAppliedForDemo] = useState(false);
+
+  useEffect(() => {
+    writeEditorRuleSnapshot(editableRules);
+  }, [editableRules]);
 
   const { fitView } = useReactFlow();
   const { zoom } = useViewport();

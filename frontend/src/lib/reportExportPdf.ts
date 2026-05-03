@@ -6,14 +6,13 @@ import {
   changedRuleDetail,
   executiveSummaryItems,
   finalModernizationStatement,
-  impactedTestNote,
-  impactedTestPaths,
   modernizedProjectTreeLines,
   productTagline,
   representativeRuleSectionTitle,
   traceabilityHeaders,
   traceabilityRows,
 } from '../data/reportDemoContent';
+import { listEditorRuleChanges, readEditorRuleSnapshot } from '../workflow/editorRuleSnapshot';
 
 /**
  * jsPDF standard fonts only support WinAnsi. Replace Unicode that would render as wrong glyphs.
@@ -100,13 +99,48 @@ export async function downloadReportPdf(): Promise<void> {
   }
   y += 4;
 
+  const editorChanges = listEditorRuleChanges(readEditorRuleSnapshot());
+  if (y > 220) {
+    doc.addPage();
+    y = 16;
+  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(pdfSafeText('2. Editor — visual rule changes (this session)'), margin, y);
+  y += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  if (editorChanges.length === 0) {
+    y =
+      addWrappedText(
+        doc,
+        'No threshold changes differ from COBOL sample defaults. Use the Editor prescreen gates to adjust values, then export this report again.',
+        margin,
+        y,
+        maxW,
+        4,
+      ) + 6;
+  } else {
+    autoTable(doc, {
+      startY: y,
+      head: [pdfCellRow(['Rule', 'Default', 'Editor', 'Technical expression'])],
+      body: editorChanges.map((r) =>
+        pdfCellRow([r.name, String(r.originalThreshold), String(r.threshold), r.technicalExpression]),
+      ),
+      styles: { fontSize: 7.5, cellPadding: 1.2 },
+      headStyles: { fillColor: [15, 98, 254] },
+      margin: { left: margin, right: margin },
+    });
+    y = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 6;
+  }
+
   if (y > 230) {
     doc.addPage();
     y = 16;
   }
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text(pdfSafeText('2. Visual business logic summary'), margin, y);
+  doc.text(pdfSafeText('3. Visual business logic summary'), margin, y);
   y += 5;
   doc.setFont('courier', 'normal');
   doc.setFontSize(8);
@@ -127,7 +161,7 @@ export async function downloadReportPdf(): Promise<void> {
   }
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text(pdfSafeText(`3. ${representativeRuleSectionTitle}`), margin, y);
+  doc.text(pdfSafeText(`4. ${representativeRuleSectionTitle}`), margin, y);
   y += 5;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
@@ -143,26 +177,6 @@ export async function downloadReportPdf(): Promise<void> {
   doc.setFontSize(7.5);
   y = addWrappedText(doc, `Modern:\n${changedRuleDetail.modernJava}`, margin, y, maxW, 3.6) + 4;
   doc.setFont('helvetica', 'normal');
-
-  if (y > 200) {
-    doc.addPage();
-    y = 16;
-  }
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(pdfSafeText('4. Impacted test paths'), margin, y);
-  y += 4;
-  autoTable(doc, {
-    startY: y,
-    head: [pdfCellRow(['Scenario', 'Before', 'After', 'Status'])],
-    body: impactedTestPaths.map((r) => pdfCellRow([r.scenario, r.before, r.after, r.status])),
-    styles: { fontSize: 8, cellPadding: 1.5 },
-    headStyles: { fillColor: [15, 98, 254] },
-    margin: { left: margin, right: margin },
-  });
-  y = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 4;
-  doc.setFontSize(8);
-  y = addWrappedText(doc, impactedTestNote, margin, y, maxW, 3.8) + 6;
 
   if (y > 220) {
     doc.addPage();
@@ -210,7 +224,7 @@ export async function downloadReportPdf(): Promise<void> {
   }
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text(pdfSafeText('Closing'), margin, y);
+  doc.text(pdfSafeText('7. Closing'), margin, y);
   y += 5;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);

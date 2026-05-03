@@ -13,7 +13,7 @@ export const REPORT_PROJECT = {
 export const productTagline =
   'We map real COBOL batch flow (LNMAIN → LNRULES → LNRATE) and copybooks into a behavioral Java port, with analysis excerpts and golden tests tied to expected-output.txt.';
 
-/** Section 3 heading (web + PDF) — not a fictional “DTI 43→45” edit; real ladder trace */
+/** Section 4 heading (web + PDF) — not a fictional “DTI 43→45” edit; real ladder trace */
 export const representativeRuleSectionTitle = 'Representative rule trace (legacy → modern)';
 
 /** Section 1 — Executive summary */
@@ -42,7 +42,7 @@ export const executiveSummaryItems: { label: string; value: string }[] = [
   },
 ];
 
-/** Section 2 — Visual business logic summary (matches analysis discovery / batch shape) */
+/** Section 3 — Visual business logic summary (matches analysis discovery / batch shape) */
 export const businessLogicTreeLines = [
   'loan-approvals-COBOL (analysis + visual map)',
   '├── src/LNMAIN.cbl',
@@ -57,7 +57,7 @@ export const businessLogicTreeLines = [
   '└── copy/DECISION.cpy',
 ];
 
-/** Section 3 — Real COBOL / Java excerpt (same thresholds as repo) */
+/** Section 4 — Real COBOL / Java excerpt (same thresholds as repo) */
 export const changedRuleDetail = {
   ruleName: 'Hard-decline ladder — DTI above 43%',
   legacySource: 'src/LNRULES.cbl → 3000-HARD-DECLINE-RULES',
@@ -87,42 +87,6 @@ export const changedRuleDetail = {
       paragraph9400DeclineEmployment(d, f);
     }`,
 };
-
-/** Section 4 — Golden parity scenarios (GoldenCobolParityTest) */
-export const impactedTestPaths: {
-  scenario: string;
-  before: string;
-  after: string;
-  status: string;
-}[] = [
-  {
-    scenario: 'Batch totals (8 applicants.dat lines)',
-    before: 'COBOL sample: 2 A / 1 R / 5 D',
-    after: 'Java LoanBatchProcessor: 2 A / 1 R / 5 D',
-    status: 'Parity',
-  },
-  {
-    scenario: 'Applicant 10001',
-    before: 'expected-output: A, DTI 11.37, APR 6.75%',
-    after: 'BatchRowResult matches id / decision / DTI / APR',
-    status: 'Parity',
-  },
-  {
-    scenario: 'Applicant 10003 (high DTI path)',
-    before: 'expected-output: D, DTI 57.50, APR 0',
-    after: 'Same decline + metrics in Java',
-    status: 'Parity',
-  },
-  {
-    scenario: 'Applicant 10002 (review path)',
-    before: 'expected-output: R, DTI 23.23, APR 0',
-    after: 'Same review outcome in Java',
-    status: 'Parity',
-  },
-];
-
-export const impactedTestNote =
-  'Rows reflect GoldenCobolParityTest vs loan-approvals-COBOL/data/expected-output.txt. If prescreen rules change in the editor, regenerate expectations and re-run mvn test.';
 
 /** Section 5 — Project tree (matches downloadable loan-approval-service layout) */
 export const modernizedProjectTreeLines = [

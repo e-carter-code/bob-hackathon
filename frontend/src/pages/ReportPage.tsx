@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Download, FileText, Loader2 } from 'lucide-react';
 import {
@@ -8,8 +8,6 @@ import {
   downloadablePackageLabel,
   executiveSummaryItems,
   finalModernizationStatement,
-  impactedTestNote,
-  impactedTestPaths,
   modernizedProjectTreeLines,
   productTagline,
   representativeRuleSectionTitle,
@@ -20,6 +18,7 @@ import { downloadModernizedProject } from '../lib/downloadModernizedProject';
 import { downloadReportPdf } from '../lib/reportExportPdf';
 import PageHeader from '../components/workflow/PageHeader';
 import { useWorkflow } from '../workflow/WorkflowContext';
+import { listEditorRuleChanges, readEditorRuleSnapshot } from '../workflow/editorRuleSnapshot';
 
 /** Mostly light blue; one rose accent (~20% non-blue family) */
 const SUMMARY_LABEL_ACCENTS = [
@@ -35,6 +34,11 @@ export default function ReportPage() {
   const { resetWorkflow } = useWorkflow();
   const [exporting, setExporting] = useState<'pdf' | 'zip' | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  const editorRuleChanges = useMemo(
+    () => listEditorRuleChanges(readEditorRuleSnapshot()),
+    [],
+  );
 
   const handlePdf = useCallback(async () => {
     setExportError(null);
@@ -137,8 +141,53 @@ export default function ReportPage() {
         </dl>
       </div>
 
+      <div className="card border-live-sky/25">
+        <h2 className="text-xl font-semibold text-text-strong mb-2">
+          2. Editor — visual rule changes (this session)
+        </h2>
+        <p className="mb-4 text-xs text-text-subtle md:text-sm">
+          Thresholds edited in the visual editor are saved per upload session. They are design-time annotations here;
+          the downloadable Java port remains the repo parity build unless you regenerate code separately.
+        </p>
+        {editorRuleChanges.length === 0 ? (
+          <p className="text-sm text-text-muted">
+            No threshold changes differ from the COBOL sample defaults yet. Open the{' '}
+            <Link to="/editor" className="text-live-sky underline-offset-2 hover:underline">
+              Editor
+            </Link>{' '}
+            and adjust a prescreen gate (e.g. max DTI), then return to this report.
+          </p>
+        ) : (
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-sm border-collapse min-w-[520px]">
+              <thead>
+                <tr className="bg-panel-bg-secondary text-text-strong">
+                  <th className="border border-border px-3 py-2 text-left font-semibold">Rule</th>
+                  <th className="border border-border px-3 py-2 text-left font-semibold">Default (COBOL sample)</th>
+                  <th className="border border-border px-3 py-2 text-left font-semibold">Editor value</th>
+                  <th className="border border-border px-3 py-2 text-left font-semibold">Technical expression</th>
+                </tr>
+              </thead>
+              <tbody>
+                {editorRuleChanges.map((r) => (
+                  <tr key={r.id} className="border-b border-border hover:bg-panel-bg-secondary/40">
+                    <td className="px-3 py-2 text-text-strong font-medium">{r.name}</td>
+                    <td className="px-3 py-2 font-mono text-text-muted">{r.originalThreshold}</td>
+                    <td className="px-3 py-2 font-mono text-live-cyan font-semibold">{r.threshold}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-text-muted md:text-sm">{r.technicalExpression}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-3 text-xs text-text-subtle">
+              Parent flows: {[...new Set(editorRuleChanges.map((r) => r.parentFlow))].join(' · ')}
+            </p>
+          </div>
+        )}
+      </div>
+
       <div className="card">
-        <h2 className="text-xl font-semibold text-text-strong mb-4">2. Visual business logic summary</h2>
+        <h2 className="text-xl font-semibold text-text-strong mb-4">3. Visual business logic summary</h2>
         <pre className="text-sm font-mono text-text-primary/95 bg-[#0d1117] border border-border rounded-lg p-4 overflow-x-auto custom-scrollbar leading-relaxed">
           {businessLogicTreeLines.join('\n')}
         </pre>
@@ -146,7 +195,7 @@ export default function ReportPage() {
 
       <div className="card border-live-sky/35">
         <h2 className="text-xl font-semibold text-text-strong mb-5">
-          3. {representativeRuleSectionTitle}
+          4. {representativeRuleSectionTitle}
         </h2>
         <div className="space-y-4 text-sm">
           <div>
@@ -176,41 +225,6 @@ export default function ReportPage() {
             </pre>
           </div>
         </div>
-      </div>
-
-      <div className="card overflow-x-auto custom-scrollbar">
-        <h2 className="text-xl font-semibold text-text-strong mb-4">4. Impacted test paths</h2>
-        <table className="w-full text-sm border-collapse min-w-[520px]">
-          <thead>
-            <tr className="bg-gradient-to-r from-live-sky via-live-cyan to-teal-400 text-[#061018]">
-              <th className="border border-black/10 px-3 py-2 text-left font-semibold">Scenario</th>
-              <th className="border border-black/10 px-3 py-2 text-left font-semibold">Before</th>
-              <th className="border border-black/10 px-3 py-2 text-left font-semibold">After</th>
-              <th className="border border-black/10 px-3 py-2 text-left font-semibold">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {impactedTestPaths.map((row, ri) => (
-              <tr key={ri} className="border-b border-border hover:bg-panel-bg-secondary/50">
-                <td className="px-3 py-2 text-text-strong font-medium">{row.scenario}</td>
-                <td className="px-3 py-2 text-text-muted">{row.before}</td>
-                <td className="px-3 py-2 text-text-muted">{row.after}</td>
-                <td className="px-3 py-2">
-                  <span
-                    className={
-                      row.status === 'Changed'
-                        ? 'font-semibold text-live-cyan'
-                        : 'text-text-subtle'
-                    }
-                  >
-                    {row.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="mt-4 text-sm text-text-muted italic border-t border-border pt-4">{impactedTestNote}</p>
       </div>
 
       <div className="card">
@@ -252,6 +266,7 @@ export default function ReportPage() {
       </div>
 
       <div className="rounded-xl border border-success-green/30 bg-success-green/5 px-6 py-5 text-center">
+        <h2 className="text-lg font-semibold text-text-strong mb-3">7. Closing</h2>
         <p className="text-base md:text-lg text-text-strong font-medium leading-relaxed max-w-4xl mx-auto">
           {finalModernizationStatement}
         </p>

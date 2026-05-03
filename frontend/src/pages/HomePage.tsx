@@ -128,7 +128,7 @@ export default function HomePage() {
           </div>
           <h3 className="mb-3 text-xl font-semibold text-text-strong">Edit Rules Safely</h3>
           <p className="flex-1 leading-relaxed text-text-muted">
-            Change business thresholds visually and see impacted test paths before modernization.
+            Change business thresholds visually; your edits appear on the modernization report for this session.
           </p>
         </div>
 
